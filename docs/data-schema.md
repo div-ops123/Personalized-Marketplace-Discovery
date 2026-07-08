@@ -27,6 +27,8 @@
 | Time since last purchase | Continuous | Recency signal — also used as training weight |
 | Device type | Categorical | Mobile / desktop / tablet |
 | Country / State | Categorical | Geo context |
+| Current product being viewed | Categorical | arrives directly in the request payload from the website. |
+
 
 ### Labels
 **Positives:** Purchase and Add-to-Cart events only.
@@ -56,7 +58,8 @@ Applied two ways:
 |---|---|---|
 | Item ID | Categorical | Learned embedding |
 | Price | Continuous | Absolute price |
-| Category / Subcategory | Categorical | Same as retrieval |
+| Category | Categorical | Same as retrieval |
+| Subcategory | Categorical | Same as retrieval |
 | Brand | Categorical | Same as retrieval |
 
 ### User Features
@@ -64,9 +67,8 @@ Applied two ways:
 |---|---|---|
 | User ID | Categorical | Learned embedding |
 | Device | Categorical | Mobile / desktop / tablet |
-| Country / State | Categorical | Geo context |
+| Country | Categorical | Geo context |
 | Page context | Categorical | Homepage / Product page / Cart page |
-| Current product being viewed | Categorical | Session context signal |
 
 ### User-Item Cross Features (Wide Component)
 These are hand-engineered feature crosses fed into the wide (memorization) component.
@@ -83,6 +85,7 @@ These are hand-engineered feature crosses fed into the wide (memorization) compo
 | Impression timestamp | Timestamp | Time of widget render |
 | Position in widget | Integer | Critical for position bias correction |
 | Surface | Categorical | Recommendation widget only |
+| Current product being viewed | Categorical | arrives directly in the request payload from the website. |
 | Dwell time | Continuous | Time spent on product page after click |
 | Event type | Categorical | Click / add-to-cart / purchase / save |
 

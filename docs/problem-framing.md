@@ -17,7 +17,7 @@ Given a buyer's interaction history (clicks, purchases, etc), their real-time se
 
 4. Online metrics vs. offline metrics. Offline NDCG doesn't move revenue. Multiple postings make this explicit. Your project must define both — the offline metric you track during development, and the online business metric that decides whether the model ships.
 
-5. Feedback loop correctness vs. convenience. If you train on logged clicks without correcting for position bias, you're training the model to recommend whatever you showed at position 1 — not what users actually preferred. This is propensity scoring. inDrive names it directly. Your design needs to acknowledge it and state your approach, even if the approach is "log position and use inverse propensity weighting in training."
+5. Feedback loop correctness vs. convenience. If you train on logged clicks without correcting for position bias, you're training the model to recommend whatever you showed at position 1 — not what users actually preferred. This is propensity scoring.
 
 ---
 
