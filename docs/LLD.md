@@ -285,6 +285,80 @@ At serving time, inject session features through a lightweight additional layer 
 At Series B/C, this is an optimization you'd pursue after the basic system is running and you've measured where latency is actually burning. 
 Don't build it upfront — but know it exists.
 
+## CI/CD for ML
+
+The DAGs are the implementation.
+
+Look back at your DAGs. 
+DAG 3 has: validate training dataset → train → offline evaluation → metrics threshold gate → register. DAG 4 has: shadow deployment → manual approval → canary → gradual promotion.
+
+this is my ML CI/CD.
+
+The QUESTION: what does a traditional software CI/CD tool like GitHub Actions add on top of what my DAGs already do?
+The answer is the code change trigger layer. 
+My DAGs handle data validation and model validation. 
+GitHub Actions handles code change validation.
+
+The moment an engineer pushes a change to the training code, the serving code, or the feature engineering code, GitHub Actions runs automated checks before that code ever reaches your Airflow DAGs or your ECS services.
+
+
+### What GitHub Actions specifically runs for my ML system:
+**On every pull request to training code:**
+
+- Unit tests on feature engineering functions — does your price normalization function produce the expected output? Does your category encoder handle unseen categories correctly?
+- Schema validation tests — does the training dataset schema match what the model expects?
+- Model smoke test — train a tiny version of the model on a small data sample, run one forward pass, verify output shape and dtype. Catches code errors before you spin up an EC2 GPU instance.
+- Linting and type checking — standard software quality gates
+
+**On merge to main:**
+
+- Trigger DAG 3 in Airflow via REST API — full training pipeline runs with real data
+- If DAG 3 succeeds and model is registered, DAG 4 triggers automatically
+
+**On every pull request to serving code (FastAPI services):**
+
+- Unit tests on serving logic — does your re-ranking MMR implementation produce diverse outputs? Does your fallback chain trigger correctly when Redis is unavailable?
+- Integration test — spin up a local Docker container with a tiny FAISS index and mock Redis, send a test request, verify the response shape
+- Container build test — does the Docker image build without errors?
+
+**On merge to main for serving code:**
+
+- Build and push Docker image to ECR (Elastic Container Registry)
+- Trigger DAG 4 for serving code deployment — shadow → canary → production
+
+
+**The three-layer picture, stated cleanly:**
+
+Layer 1 — GitHub Actions (code validation): runs on every pull request and merge. Validates that code changes don't break the system before anything reaches production. Fast — completes in minutes.
+
+Layer 2 — Airflow DAGs (pipeline orchestration): runs training, evaluation, and deployment pipelines. Validates that data is clean and model is better than production. Slower — hours for full training run.
+
+Layer 3 — ECS + CloudWatch (production validation): shadow mode and canary routing validate that the deployed model behaves correctly on real traffic. Slowest — hours to days of observation before full promotion.
+
+My DAGs handle Layer 2. 
+GitHub Actions handles Layer 1. 
+Layer 3 is my existing deployment pipeline. 
+Together they form my ML CI/CD system.
+
+**CI/CD for ML:** GitHub Actions + Airflow DAGs + ECS deployment pipeline.
+
+**Three validation layers operating at different timescales:**
+
+Layer 1 — GitHub Actions (minutes):
+Triggered on pull request and merge to main. Validates code correctness before pipeline execution.
+Training code changes: unit tests on feature engineering functions, schema validation tests, model smoke test on small data sample, linting and type checking.
+Serving code changes: unit tests on serving logic and re-ranking rules, integration test with local Docker container and mock dependencies, Docker image build validation.
+On merge: push Docker image to ECR, trigger Airflow DAG via REST API.
+
+Layer 2 — Airflow DAGs (hours):
+DAG 3 validates data quality and model performance. DAG 4 validates production behavior via shadow deployment. Manual approval gate between shadow and canary. Detailed in orchestration section.
+
+Layer 3 — ECS + CloudWatch (hours to days):
+Canary routing validates real-traffic behavior. Metrics compared per traffic split. Gradual promotion or instant rollback based on monitoring signals. Detailed in deployment pipeline section.
+
+Key difference from software CI/CD: Traditional CI/CD asks "did the tests pass?" ML CI/CD asks "is this model actually better than what's in production?" The threshold gate in DAG 3 (offline metrics must exceed production model scores) and the shadow evaluation in DAG 4 (candidate sets and score distributions compared against production) are the ML-specific validation steps that have no equivalent in standard software deployment.
+---
+
 
 =============
 claude code
