@@ -157,17 +157,64 @@ should i use othe predictive features? or i should leave as is for now it alread
 
 ## 5. Retrieval model and ranking model 
 
-they say pytroch does that mean we code it from scratch? no framework? nothing like tensorflow recommenders framework?
+Retrieval model: Two-tower neural network in PyTorch.
+User tower and item tower are independent nn.Module classes. Independence enables offline precomputation of item embeddings. At serving time only the user tower runs — forward pass produces user embedding, ANN search against precomputed FAISS index returns top 500 candidates.
+Rejected matrix factorization: uses only user-item interaction signal, no content features, structural cold-start problem for new items.
+Rejected NeuMF: replaces dot product with neural interaction function requiring both user and item as joint input, breaking ANN index compatibility — cannot precompute items separately.
 
-retrval model = requirements: model-based CF. user-item interaction + context. options: 2 tower, _
+Ranking model: Wide & Deep in PyTorch.
+Wide component: linear layer over explicit hand-engineered cross features (user-seller purchase history, price vs average spend, brand affinity match). Handles memorization of specific co-occurrence patterns.
+Deep component: feedforward neural network consuming user embedding, item embedding, and dense features. Handles generalization across unseen feature combinations and preserves geometric structure of embedding inputs.
+Rejected gradient boosting (XGBoost/LightGBM): cannot natively consume raw embedding vectors from retrieval stage without dimensionality reduction that destroys geometric structure. Strong choice if ranking features were purely tabular — not this system.
+Rejected transformer ranker: requires significantly more training data to outperform Wide & Deep, higher serving complexity, more compute. Justified at larger scale and team size than Series B/C.
+---
 
-ranking model = requirements: cross feature
+Retrieval model inference optimization:
 
-training infrastructure = , 
+Trained model → TorchScript compilation (removes Python interpreter overhead, enables C++ execution) → INT8 quantization for CPU serving or float16 for GPU serving → ONNX export for ONNX Runtime serving (automatic layer fusion and graph optimization).
 
-inference optimization format =  how the model gets packaged for serving
+Dynamic batching at serving layer: collect requests over 1-5ms window, batch 16-32 user tower forward passes per GPU kernel launch. Reduces per-request GPU overhead at 3-5K peak QPS, improves GPU utilization from ~10% to 60-80%.
 
-where to train = ec2 with GPU not sagemaker becos of vendor lock-in
+User embedding caching: not viable at full tower level due to session features changing per request. Advanced optimization (late feature fusion — pre-compute static aggregate embedding, inject dynamic session features through lightweight layer at serving time) deferred to post-launch when latency profiling confirms user tower as bottleneck.
+
+Item embeddings: precomputed offline, stored in FAISS. Never recomputed at serving time unless item features change (triggered by catalog event pipeline).
+---
+
+I have three distinct services running on ECS.
+
+Retrieval service: receives recommendation request, fetches user features from Redis, runs user tower forward pass, queries FAISS, returns 500 candidates to ranking service. Runs on ECS, needs memory for FAISS index (under 512MB at Series B/C item catalog size) and PyTorch user tower model.
+
+Ranking service: receives 500 candidates from retrieval service, fetches item features from Redis batch lookup and user features, computes cross features, runs Wide & Deep forward pass, applies re-ranking rules, returns final ordered list to API layer. Runs on ECS, needs memory for Wide & Deep model.
+
+API gateway / orchestrator: receives raw user request from frontend, calls retrieval service, passes candidates to ranking service, returns final list to frontend. Thin service, no ML model, minimal memory. Also handles fallback routing when retrieval or ranking service is unavailable.
+
+Three ECS services. Each independently auto-scalable. Each independently deployable. Each with its own health checks and circuit breakers.
+
+One more thing: FAISS index loading time. When ECS starts a new retrieval service container, it needs to load the FAISS index from S3 into memory before it can serve requests. That load can take 30-60 seconds for a large index. During that window the container shouldn't receive traffic. ECS health checks handle this — the container reports unhealthy until the index is loaded, then healthy, then ECS starts routing traffic. This is an implementation detail worth naming because it directly affects your deployment and auto-scaling behavior.
+
+Clean version for documentation:
+
+- Model training: EC2 with GPU (p3 instance family) on AWS.
+
+- Standard PyTorch training code with no SageMaker-specific APIs — fully portable across environments. Spot instances for 60-70% cost reduction versus on-demand; checkpoint to S3 every N steps to handle spot interruption and resume. Training triggered by Airflow on schedule (weekly) or monitoring alert (drift detected). Model artifact saved to S3 on completion, registered to MLflow model registry with training metadata (dataset version, hyperparameters, offline evaluation metrics).
+
+- Rejected SageMaker training: proprietary execution environment and APIs create vendor lock-in. Per-instance-hour markup over EC2 baseline not justified by managed features at this scale.
+
+- Model serving: AWS ECS (Elastic Container Service).
+
+- Three containerized services:
+
+- Retrieval service: FastAPI application, loads PyTorch user tower (TorchScript/ONNX) and FAISS index from S3 on startup. ECS health check gates traffic until index fully loaded. Fetches user aggregate features and session features from Redis in parallel, runs user tower forward pass with dynamic batching, queries FAISS, returns 500 candidates with similarity scores.
+
+- Ranking service: FastAPI application, loads Wide & Deep model (TorchScript/ONNX) on startup. Receives 500 candidate IDs from retrieval service, batch-fetches item features from Redis, fetches user features from Redis, computes cross features, runs ranking forward pass, applies re-ranking layer (MMR diversity, novelty slots, exploration slots), returns final ordered list.
+
+- API gateway: thin FastAPI service, orchestrates retrieval → ranking call chain, handles fallback routing if downstream services unavailable, returns final recommendation list to frontend.
+
+- Each service independently auto-scaled via ECS Application Auto Scaling based on CPU utilization and request queue depth. Services communicate via internal AWS VPC — no public internet traffic between services.
+
+- Rejected EKS: Kubernetes control plane operational overhead not justified for three services. Revisit when service count exceeds 10-15 or when cross-service traffic patterns require advanced mesh routing.
+
+- Rejected Lambda: no persistent memory between invocations — cannot hold FAISS index or PyTorch model in memory. Cold start latency incompatible with sub-50ms retrieval budget.
 
 
 Cold start:
@@ -187,12 +234,19 @@ options: Airflow, Prefect and Dagster
 
 ## 8. Model serving 
 serving also includes the question of where the model lives in memory, how it gets loaded, and how inference is optimized. 
-options: fastapi, ONNX, TorchScript
+The workflow: train in PyTorch → export to ONNX → serve with ONNX Runtime inside your FastAPI service.
 
+## Caching:
+
+split the user tower into a static path and a dynamic path. 
+Pre-compute the embedding from aggregate features offline and cache it in Redis. 
+At serving time, inject session features through a lightweight additional layer rather than running the full tower from scratch. This means only the dynamic portion runs at inference time, not the full tower. This is called a late feature fusion pattern. 
+At Series B/C, this is an optimization you'd pursue after the basic system is running and you've measured where latency is actually burning. 
+Don't build it upfront — but know it exists.
 
 
 =============
-
+claude code
 # Proper LLD covers:
 
 Data pipelines in detail — the exact schema of your interaction logs, how the batch pipeline computes and writes user features, how the stream processor aggregates session events, how the log-and-join training pipeline works.
@@ -226,40 +280,6 @@ Decide when to use it versus something else
 
 
 ---
-
-other things to justify tradeoffs.
-retreval model
-ranking model
-where to train
-model versioning n registry
-experiment tracking (MLflow, Weights & Biases, Neptune)
-orchestrator - for ml pipelines(training pipeline, validation pipeline, deployment pipeline, serving pipeline), data pipelines (Airflow, Prefect, Dagster) 
-model serving
-Inference optimization / model serving format. You listed model serving but didn't separate the question of how the model gets packaged for serving. PyTorch model in training format is not the same thing as a model optimized for low-latency inference. ONNX export, TorchScript, TensorRT quantization — these sit between training and serving and they directly affect whether you hit your latency budget. At retrieval stage where you're running the user tower forward pass at 3-5K QPS, this matters.
-
-CI/CD for ML
-A/B testing frameworks 
-
-storage
-streaming + batch processing
-data transformation tool - how is this separate?
-feature stores offline n online n realtime
-
-monitoring infra
-
-Storage
-Streaming + batch processing
-
-
-
-
-suggestions:
-**retreval Model:** Two-Tower Neural Network
-**ranking Model:** Wide & Deep
-
-**Storage:** Interaction logs → data warehouse (BigQuery / Redshift). Impression logs → S3 with Athena on top for fast querying between retrieval and ranking stages during debugging.
-
-
 
 
 generate static synthetic data for experimentation.

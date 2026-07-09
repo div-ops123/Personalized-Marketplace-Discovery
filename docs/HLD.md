@@ -141,7 +141,7 @@ When the ranking service receives 500 candidate IDs and similarity scores from r
    - Item brand vs. user preferred brands
    - Has user purchased from this seller before?
    - Has user bought in this subcategory before?
-3. All features + retrieval similarity scores concatenated and passed through the ranking model.
+3. All features + retrieval similarity scores +  the learned embeddings concatenated and passed through the ranking model.
 4. Model outputs a relevance score for each of the 500 candidates.
 5. Re-ranking layer applied in order (see Re-ranking section).
 6. Final ordered list of 10–20 items returned to the API layer.
