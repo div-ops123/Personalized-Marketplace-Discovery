@@ -225,12 +225,36 @@ Enough history → full CF. And A/B testing to find the CF threshold empirically
 
 
 ## 6. Experiment tracking + model versioning and registry
-MLflow
+
+Experiment tracking: MLflow on EC2.
+
+Runs alongside training infrastructure. MLflow server backed by S3 for artifact storage and PostgreSQL RDS for metadata (run parameters, metrics, tags). 
+Each training run logs: dataset S3 path and timestamp, feature schema version, git commit hash, hyperparameters, training loss per epoch, Recall@500 and NDCG@K on validation set, training duration and compute cost, preprocessing pipeline artifacts.
+MLflow autologging handles optimizer parameters and loss curves. Business-critical context (dataset version, git hash, offline evaluation metrics) logged explicitly.
+
+Rejected Weights & Biases: stronger experiment tracking UX but SaaS-only — training data and model metadata leave your AWS environment. At a marketplace handling user behavior data, keeping ML artifacts inside your own infrastructure is the safer default. Revisit if team size grows and experiment collaboration overhead justifies external tooling.
+
+Model registry: MLflow Model Registry.
+
+Integrated with experiment tracking — single API call promotes a successful run to the registry. 
+Registry stages: Staging → Production → Archived. 
+Each registered model version includes: model weights, preprocessing pipeline artifacts (encoders, normalizers), model card (training dataset description, offline metrics, feature schema, known limitations).
+Old production model moves to Archived on promotion of new model — available for instant rollback without retraining. Run ID links every registry entry back to the exact experiment run that produced it.
+
+Promotion gate: training script runs offline evaluation after training completes. Model registers to Staging only if Recall@500 >= defined threshold AND NDCG@K >= current production model score. Manual review required before promotion from Staging to Production.
 
 ## 7.  Orchestrator 
 By now you know your cloud, your data pipelines, your training infrastructure. 
 The orchestrator stitches all of it together — training pipeline, validation pipeline, deployment pipeline, data pipelines. 
 options: Airflow, Prefect and Dagster
+
+me:
+airflow is for large companies. unmathed scalability.
+prefect is lightweight n just python decorators, developer friendly
+
+---
+The Airflow training pipeline orchestrates this entire flow: trigger training job → log to MLflow → run offline evaluation → if metrics pass threshold, register to registry → trigger shadow deployment on ECS → notify team for manual review before canary promotion.
+
 
 ## 8. Model serving 
 serving also includes the question of where the model lives in memory, how it gets loaded, and how inference is optimized. 
