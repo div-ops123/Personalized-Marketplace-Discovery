@@ -244,16 +244,33 @@ Old production model moves to Archived on promotion of new model — available f
 Promotion gate: training script runs offline evaluation after training completes. Model registers to Staging only if Recall@500 >= defined threshold AND NDCG@K >= current production model score. Manual review required before promotion from Staging to Production.
 
 ## 7.  Orchestrator 
-By now you know your cloud, your data pipelines, your training infrastructure. 
-The orchestrator stitches all of it together — training pipeline, validation pipeline, deployment pipeline, data pipelines. 
-options: Airflow, Prefect and Dagster
 
-me:
-airflow is for large companies. unmathed scalability.
-prefect is lightweight n just python decorators, developer friendly
+i choose airflow becos jobs are scheduled.
+None are particularly interactive.
+also becos my dominant constraint isn't making pipelines beautiful.
+It's reliably orchestrating production workflows.
+Airflow has solved this problem for years.
 
----
-The Airflow training pipeline orchestrates this entire flow: trigger training job → log to MLflow → run offline evaluation → if metrics pass threshold, register to registry → trigger shadow deployment on ECS → notify team for manual review before canary promotion.
+Airflow's retry and alerting behavior is the actual production value. 
+Each task in a DAG can be configured with retry count, retry delay, and timeout. 
+This failure handling pattern — retry before alert, alert before giving up — is the operational behavior that makes a production ML system maintainable by a small team.
+
+### DAG structure
+
+DAG 1 — Daily Feature Pipeline
+Trigger: 2am daily schedule
+Read interaction events from Snowflake → Spark feature computation on EMR → Validate features (null rates, coverage, value ranges, row count) → Branch: pass → Write to Snowflake offline store → Write to Redis online store → Notify success. Branch: fail → Alert on-call, halt pipeline, do not write to Redis.
+
+DAG 2 — Streaming Pipeline
+Remove from Airflow. Spark Structured Streaming managed as long-running EMR step. CloudWatch monitors records processed per minute and Kinesis consumer lag. CloudWatch alarms page on-call on throughput drop. Airflow only triggers initial EMR streaming job deployment on pipeline code changes.
+
+DAG 3 — Training Pipeline
+Trigger: drift detection alert OR manual trigger
+Read serving logs from Snowflake → Read interaction events from Snowflake → Spark log-and-join assembly (90-day rolling window, recency decay, false negative filter) → Validate training dataset → Train model on EC2 GPU spot instance → Offline evaluation (Recall@500, NDCG@K) → Branch: metrics pass threshold → Save model + preprocessing artifacts to S3 → Register to MLflow registry → Trigger DAG 4 via Airflow REST API → Notify team. Branch: metrics fail → Log failure, alert team, halt.
+
+DAG 4 — Deployment Pipeline
+Trigger: explicit trigger from DAG 3 via REST API
+Load registered model from MLflow → Deploy to ECS shadow environment → Run shadow evaluation (compare candidate sets and scores against production model on live traffic) → Notify team with shadow metrics via Slack → Wait for manual approval (ExternalTaskSensor waiting on manual Promotion DAG trigger) → On approval: canary rollout at 5% traffic → Monitor canary metrics for defined window → Gradual traffic increase → Full promotion → Archive previous production model.
 
 
 ## 8. Model serving 
