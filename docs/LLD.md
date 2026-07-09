@@ -15,20 +15,6 @@ Enough history → full CF. And A/B testing to find the CF threshold empirically
 
 =============
 
-# Proper LLD covers:
-
-Data pipelines in detail — the exact schema of your interaction logs, how the batch pipeline computes and writes user features, how the stream processor aggregates session events, how the log-and-join training pipeline works.
-
-Model training pipeline — how you go from raw logs to a trained two-tower model and a trained Wide & Deep model. Offline evaluation before any model touches production. Feature engineering steps. Negative sampling implementation.
-
-Serving infrastructure — the retrieval service and ranking service as deployed components. API contracts between them. How the ANN index is loaded and queried. How the feature store is structured and accessed. Latency budgets per component.
-
-Re-ranking implementation — MMR algorithm concretely. How novelty and exploration slots are allocated and logged. How the final list is assembled.
-
-Monitoring and alerting infrastructure — where metrics are computed, how alerts are triggered, what the on-call response looks like.
----
-
-
 # Business constraints
 
 - Item catalog size = 500k
@@ -360,6 +346,32 @@ Key difference from software CI/CD: Traditional CI/CD asks "did the tests pass?"
 ---
 
 
+## A/B testing framework and monitoring infrastructure. 
+
+Naive A/B testing poisons your future training data. 
+The fix is surface attribution logging — you already designed this. 
+Every interaction is tagged with which model version served it. 
+At training time you filter by surface and model version so treatment group interactions don't corrupt the control model's retraining data and vice versa.
+
+**A/B testing framework:**
+
+User assignment: consistent hashing of user_id to experiment bucket, enforced at API gateway before request reaches retrieval service. Redis-backed bucket assignment table (user_id → experiment_group) for O(1) lookup. Guarantees same user always sees same model version.
+
+Traffic routing: API gateway reads bucket assignment, routes request to correct ECS model version (control or treatment). Both versions run simultaneously as separate ECS task definitions.
+
+Metric collection: all interactions tagged with experiment_group in serving logs. Spark batch job reads Snowflake, computes per-group metrics (recommendation-attributed CTR, purchase rate, GMV), runs two-sample statistical significance test. Experiment results reviewed on 2-4 week observation window — novelty effect in week one can produce misleading CTR lift that doesn't persist to purchase rate.
+
+Feedback loop protection: surface attribution on all interactions prevents treatment group behavior from contaminating control model retraining data. At training time, serving logs filtered by model version before assembly.
+
+Rejected external experimentation platforms (Optimizely, LaunchDarkly): adds SaaS cost and external dependency for a bucketing problem solvable with a Redis hash lookup and a consistent hash function at Series B/C scale.
+
+**Monitoring infrastructure:**
+- System health (second-to-second): AWS CloudWatch. ECS container metrics (CPU, memory), request latency P99 per service, error rates, Redis connection saturation, FAISS query latency. CloudWatch alarms → PagerDuty for on-call response.
+- ML quality (hour-to-day): Grafana dashboards backed by CloudWatch custom metrics. Spark daily job computes: candidate diversity per request, new item coverage (last 7 days), CTR by position, recommendation-attributed purchase rate and GMV, catalog coverage. Pushed to CloudWatch as custom metrics. Grafana visualizes trends with control limit overlays for anomaly detection.
+- Pipeline health (daily): Airflow task-level monitoring. Feature freshness, training dataset row count, feature null rates, Kinesis consumer lag, serving log volume. Failed validation tasks alert via Slack integration.
+- Rejected Datadog as primary tool: per-host and per-custom-metric billing grows fast at Series B/C with dozens of ML-specific metrics. CloudWatch + Grafana achieves equivalent observability at significantly lower cost. Datadog added as upgrade when team size exceeds 5-6 engineers and operational overhead of three tools exceeds Datadog pricing.
+
+
 =============
 claude code
 # Proper LLD covers:
@@ -373,26 +385,6 @@ Serving infrastructure — the retrieval service and ranking service as deployed
 Re-ranking implementation — MMR algorithm concretely. How novelty and exploration slots are allocated and logged. How the final list is assembled.
 
 Monitoring and alerting infrastructure — where metrics are computed, how alerts are triggered, what the on-call response looks like.
-
----
-
-Locality-Sensitive Hashing (LSH):
-Annoy:
-SCANN
-
-
-What do I think this is for?
-Where do I think it will break?
-What assumptions does it quietly make?
-How does it fail silently? 
-What do I expect the tradeoffs to be?
-
-at the end i must:
-know what it is
-Know where it breaks
-Decide when to use it versus something else
-
-
 
 ---
 
