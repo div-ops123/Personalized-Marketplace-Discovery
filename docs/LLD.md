@@ -1,9 +1,3 @@
-chat = Collaborative filtering fundamentals and similarity assumptions
-search = Question 1:
-
-read: Scroll depth logging. 
-read: Position swapping on low-confidence pairs
-for position debias
 
 ---
 
@@ -104,7 +98,9 @@ Stream processing layer: read from the ingestion layer, aggregate session featur
 Batch processing layer: read from Snowflake, compute daily aggregate user features, write back to feature store. This is Spark.
 
 Step 2: Kinesis versus Kafka for event ingestion.
+
 Event ingestion: Amazon Kinesis. Managed service, zero cluster operations, native AWS integration, sufficient throughput ceiling for Series B/C event volume (estimated peak 5,000-10,000 events/minute). Rejected Kafka on EC2 and MSK — operational complexity not justified at this event volume and team size.
+
 Stream processing (session features): 
 Spark Structured Streaming on EMR. 
 Micro-batch with 1-minute windows computes session aggregations (items clicked, categories browsed, searches in last N minutes) and writes to Redis session store. 
@@ -372,35 +368,60 @@ Rejected external experimentation platforms (Optimizely, LaunchDarkly): adds Saa
 - Rejected Datadog as primary tool: per-host and per-custom-metric billing grows fast at Series B/C with dozens of ML-specific metrics. CloudWatch + Grafana achieves equivalent observability at significantly lower cost. Datadog added as upgrade when team size exceeds 5-6 engineers and operational overhead of three tools exceeds Datadog pricing.
 
 
-=============
-claude code
-# Proper LLD covers:
+# Feature Store
 
-Data pipelines in detail — the exact schema of your interaction logs, how the batch pipeline computes and writes user features, how the stream processor aggregates session events, how the log-and-join training pipeline works.
+**Retrieval user features:**
 
-Model training pipeline — how you go from raw logs to a trained two-tower model and a trained Wide & Deep model. Offline evaluation before any model touches production. Feature engineering steps. Negative sampling implementation.
+* User ID → from request
+* Preferred categories 90 days → offline (Redis)
+* Preferred brands 90 days → offline (Redis)
+* Purchase frequency 30 days → offline (Redis)
+* Time since last purchase → offline (Redis)
+* User tenure → offline (Redis)
+* Recent viewed categories 30 days → offline (Redis)
+* Recent viewed brands 30 days → offline (Redis)
+* Average purchase price → offline (Redis)
+* Country → from request
+* Current product ID being viewed → from request
+* Session items clicked last N minutes → online (Redis session store, logged at serving time)
+* Session categories browsed last N minutes → online (Redis session store, logged at serving time)
 
-Serving infrastructure — the retrieval service and ranking service as deployed components. API contracts between them. How the ANN index is loaded and queried. How the feature store is structured and accessed. Latency budgets per component.
+**Retrieval item features:**
 
-Re-ranking implementation — MMR algorithm concretely. How novelty and exploration slots are allocated and logged. How the final list is assembled.
+* All item features → offline (Redis item store, precomputed from item tower)
 
-Monitoring and alerting infrastructure — where metrics are computed, how alerts are triggered, what the on-call response looks like.
+**Ranking features:**
 
----
+* User ID → from request
+* Item IDs → from retrieval service response
+* Item features (subcategory, price, brand, category) → offline (Redis item store, batch lookup)
+* Current session length → online (Redis session store)
+* Session items viewed → online (Redis session store)
+* Session categories viewed → online (Redis session store)
+* Session search query → online (Redis session store)
+* Recent search terms 7 days → offline (Redis, updated daily)
+* Cart contents → from request payload (frontend sends current cart state with each recommendation request)
+* Time since last click → online (Redis session store)
+* Session click count → online (Redis session store)
+* Has purchased this brand before? → computed at serving time from offline features
+* Has purchased this category before? → computed at serving time from offline features
+* Item price / average spend ratio → computed at serving time from offline features
+* Item brand vs preferred brands → computed at serving time from offline features
+* Viewed this brand recently? → computed at serving time from offline features
+* Viewed this category recently? → computed at serving time from offline features
 
+**Serving log schema (written to Snowflake at inference time):**
 
-generate static synthetic data for experimentation.
-state what you would collect fresh data after deployment? data collection strategy?
-do i build data pipeline, i think for collecting it like the data would flow into it and get stored.
-no transformation? only when i want to retrain?
-the software engineer would design how the data would come form the website.
-i would just make the infra of where it stays when it comes.
+* request_id, user_id, timestamp
+* aggregate_features (values read from Redis offline store)
+* session_features (values read from Redis session store — point-in-time capture)
+* item_ids_shown, positions, device, surface, page_context
 
-===
-
-
-
-after HLD & LLD
-ask claude to crtique ur architecture. the problem it's solving. the architecture. does it align with what the market says they want?
-what did i not put that is high value they need?
-what did i put that is low value?
+```
+Kinesis → Spark Structured Streaming → Redis (session store)
+                                              ↓
+User request → Retrieval service reads Redis → runs inference 
+                    → logs {request_id, user_id, timestamp, 
+                             aggregate_features, session_features, 
+                             items_shown, positions} → Snowflake
+```

@@ -79,7 +79,7 @@ Three separate things get logged, independently:
 
 **1. Serving logs (for training data assembly):** request_id, user_id, timestamp, exact feature values used, item_ids shown, positions, device, surface. Written to Snowflake immediately at serving time.
 
-**2. Interaction events (labels):** user_id, item_id, event_type, timestamp, session_id. Written to Snowflake via Kinesis continuously as users interact.
+**2. Interaction events (labels):** user_id, item_id, event_type, Dwell time, timestamp, session_id. Written to Snowflake via Kinesis continuously as users interact.
 
 **3. Prediction scores (for monitoring):** request_id, item_id, retrieval similarity score, ranking model score. Written to Snowflake or S3 for offline evaluation and drift detection.
 
