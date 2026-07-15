@@ -85,6 +85,8 @@ Three separate things get logged, independently:
 
 At training time, Spark joins (1) with (2) on user_id and timestamp to produce labeled training examples with point-in-time correct features. (3) is used separately for monitoring — comparing model score distributions over time to detect drift.
 
+Training data already captures which surface each impression came from (surface attribution). At training time, filter to product page impressions only. Your model trains specifically on product page behavior, not homepage behavior mixed in.
+
 ---
 
 **Now the offline store question answers itself.**

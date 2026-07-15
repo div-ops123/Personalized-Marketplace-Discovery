@@ -17,7 +17,7 @@ Enough history → full CF. And A/B testing to find the CF threshold empirically
 
 - QPS = 5,000 peak QPS. This number is lower than you might think because recommendation requests are tied to page loads, not every click.
 
-- latency = Industry standard for retrieval stage is P99 under 50ms so that your total end-to-end recommendation response (retrieval + ranking + re-ranking + API overhead) stays under 200ms. 
+- latency = Industry standard for retrieval stage is P99 under 30ms so that your total end-to-end recommendation response (retrieval + ranking + re-ranking + API overhead) stays under 150ms. 
 
 - retreval quality = industry standard at this scale is 95%+ recall@500 — meaning your ANN search should return 95% of the items that an exact brute-force search would return in the top 500. The gap is acceptable because the ranking stage provides a safety net.
 
@@ -425,3 +425,154 @@ User request → Retrieval service reads Redis → runs inference
                              aggregate_features, session_features, 
                              items_shown, positions} → Snowflake
 ```
+
+=============
+
+# Proper LLD covers:
+
+Data pipelines in detail — the exact schema of your interaction logs, how the batch pipeline computes and writes user features, how the stream processor aggregates session events, how the log-and-join training pipeline works.
+
+Model training pipeline — how you go from raw logs to a trained two-tower model and a trained Wide & Deep model. Offline evaluation before any model touches production. Feature engineering steps. Negative sampling implementation.
+
+Serving infrastructure — the retrieval service and ranking service as deployed components. API contracts between them. How the ANN index is loaded and queried. How the feature store is structured and accessed. Latency budgets per component.
+
+Re-ranking implementation — MMR algorithm concretely. How novelty and exploration slots are allocated and logged. How the final list is assembled.
+
+Monitoring and alerting infrastructure — where metrics are computed, how alerts are triggered, what the on-call response looks like.
+
+===
+
+
+retreval **Positive sampling:** All confirmed purchases and add-to-cart events from recommendation widgets.
+
+ranking positive sampling: Graded relevance score (0–5) events from recommendation widgets.
+
+QUESTION:
+so it's when events happen that we get fresh training data? becos that is when labels arrive.
+we then join Serving logs with interaction events(labels) from specifically recommendation widgets. to retrain?
+that meansnot all Serving logs will have a corresponding interaction events.
+that means not all Serving logs would be used for training?
+that means there's a labeling delay?
+---
+
+
+
+---
+
+One surface. One widget. Built completely end to end.
+
+Which surface and which widget:
+Product detail page.
+The user is looking at item X. Show them items most likely to convert given that context.
+
+**Widget shown to the user:** 
+"Similar Items" or "You May Also Like"
+
+**Recommendation strategy:**
+Retrieve and rank products that are most similar to the currently viewed item and most likely to be clicked or purchased.
+
+**Primary metrics**
+Recommendation-attributed CTR — Are users engaging with the recommendations?
+Recommendation-attributed CVR — Do those recommendations result in purchases?
+
+**Guarail:**
+watch for click bait.
+
+**Stage 1 — Retrieve similar items (Item-Item tower)**
+
+Examples of signals:
+image embedding similarity
+text embedding similarity
+category
+brand
+tags
+price range
+
+This answers:
+"Which products are similar?"
+
+**Stage 2 — Rank them**
+
+Among those similar products, predict
+"Which one is this user most likely to click or buy?"
+
+example signals:
+retreval similarity score
+features from current item, 
+candidate item id
+user preferences(brand, average purchase price, average clicked price, country, device type, )
+historical Query/context CTR of candidate item
+ex: Viewing running shoes -> How often is THIS candidate clicked?
+historical conversion rate of candidate item
+
+
+The model outputs one score, for example:
+Predicted probability
+that this user clicks
+this candidate
+given this current item.
+
+Indicate which features are:
+computed offline
+computed online
+cached
+refreshed daily
+
+---
+
+**Similar Items**
+
+Goal:
+Help users compare products.
+
+Useful when the customer thinks:
+"I'm not sure I want this exact item."
+
+Here you're asking:
+"Show me alternatives."
+
+Not accessories.
+
+**Frequently Viewed Together**
+
+Goal:
+Help users discover related products.
+
+Useful when the customer thinks:
+"What else might I need?"
+
+
+
+
+
+Claude code prompt:
+> Polish my lld.md to be precise and clear and neatly written.
+
+> tell me what you think the single weakest part of my design is right now — the thing a senior engineer would push back on hardest in a design review.
+
+> crtique my systemdesign. the problem framing. the architecture. does it align with what the market says they want from a ML engineer to do for them?
+what did i not put that is of high value that they need?
+what did i put that is of low value?
+
+
+--
+
+another one is i said to use all data not just the one gotten from recommendation widget.
+i said to use it to build user taste profile
+then evaluate on only data from recommendation widget
+
+how does that make any sense?
+it doesn't blend to me.
+is it not only tge data i will use for triniing i should be collecting?
+
+---
+
+i think another thing is that recommendations are updated only after 24 hrs.
+
+question: am i designing solution againt or for the problem?
+
+product detail page recs suppose change based on what product is currently being viwed.
+all personalized to user taste profile.
+
+QUESTION:  product detail page if user goes back n clicks same item we can show same recs?
+is that my problem or the developer problem?

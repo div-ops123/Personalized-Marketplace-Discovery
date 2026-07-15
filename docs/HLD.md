@@ -39,8 +39,8 @@ Final List (10–20 items) → API → User
 
 **Goal:** Narrow millions of catalog items to ~500 plausible candidates fast.
 **Model:** Two-Tower Neural Network
-**Latency budget:** < 100ms
-**Evaluation metric:** Recall@500
+**Latency budget:** < 30ms
+**Evaluation metric:** Recall@500 reduce?
 
 ---
 
@@ -123,7 +123,7 @@ The third fallback requires no model, no feature store, no ANN search. It never 
 
 **Goal:** Score 500 retrieval candidates and select a final ordered list of 10–20 items.
 **Model:** Wide & Deep
-**Latency budget:** < 100ms (total end-to-end target: < 200ms)
+**Latency budget:** < 100ms
 **Evaluation metric:** NDCG@K
 
 ---
@@ -200,10 +200,7 @@ All three steps draw only from the top 500 candidates. No new items are pulled f
 Ranking model scores
         │
         ▼
-1. Diversity filtering (MMR)
-        │
-        ▼
-2. Novelty injection
+1. Novelty injection
         │
         ▼
 3. Exploration slots
@@ -216,17 +213,7 @@ Final ordered list
 
 ---
 
-#### 1. Diversity (MMR — Maximum Marginal Relevance)
-
-**What it does:** Reorders the existing top 500 candidates so no single category dominates the final list. Does not add new items or remove items from the pool.
-
-**Mechanism:** Build the final list one slot at a time. For each next slot, apply a penalty to every remaining candidate proportional to its similarity to items already selected. A tuning parameter (lambda) controls the relevance-diversity balance. Lambda close to 1 = relevance dominates. Lambda close to 0 = diversity dominates. Similarity computed in item embedding space — same embeddings produced by the item tower.
-
-**Tradeoff:** Trading some predicted purchase probability for a list that doesn't feel repetitive. A list of ten identical items converts worse than a diverse list even if each individual item scored higher.
-
----
-
-#### 2. Novelty Injection
+#### 1. Novelty Injection
 
 **What it does:** Replaces a fixed number of final list slots with the highest-scored candidates from the top 500 that do not appear in this user's impression or purchase history.
 
@@ -238,7 +225,7 @@ Final ordered list
 
 ---
 
-#### 3. Exploration Slots
+#### 2. Exploration Slots
 
 **What it does:** Replaces a fixed number of final list slots with the highest-scored candidates from the top 500 that have high score uncertainty — new sellers, new categories, items with thin interaction history.
 

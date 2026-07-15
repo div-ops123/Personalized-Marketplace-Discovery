@@ -4,11 +4,19 @@
 
 **Revenue attributable to recommendation surfaces**
 
-> Gross Merchandise Value (GMV) generated from products that users clicked through a recommendation widget and purchased within a defined attribution window.
+> Gross Merchandise Value (GMV) generated from products that users clicked through the Product Detail Page Similar Items recommendation widget and purchased within the attribution window (see definition below).
 
 **Why?**
 
 This directly measures the business value created by the recommendation system rather than overall company revenue.
+
+---
+
+## Attribution Window Definition
+
+> A purchase counts as recommendation-attributed if it occurs within 24 hours of a click on an item from the Similar Items widget, provided no other attribution event (e.g., a subsequent search or direct navigation touch) overrides it.
+
+24 hours is a starting assumption, not a validated business constant — buying cycles vary by product category (e.g., groceries vs. furniture). The precedence rule for what counts as an "overriding" event is also not yet fully specified (e.g., last-touch vs. any-touch across channels). Revisit both with business/product input once category-level purchase-cycle data is available.
 
 ---
 
@@ -25,6 +33,26 @@ If users purchase more items after interacting with recommendations, recommendat
 ---
 
 ## 3. Model Evaluation Metrics
+
+### Training Label Definitions
+
+**Retrieval stage**
+
+- Positive: recommendation impressions that were clicked.
+- Negative: recommendation impressions shown but not clicked before the widget refreshed or the impression ended.
+
+These labels are used to train the retrieval (candidate generation) model on click signal, since purchase events are too sparse at the impression level to train on directly. This is distinct from the Recall@K offline evaluation below, which measures against purchased items as ground truth — training on abundant click signal, evaluating against the rarer, business-aligned purchase signal.
+
+**Ranking stage**
+
+- Positive: recommendation-attributed purchases (see Attribution Window Definition above).
+- Negative: shown but not purchased — includes both clicked-but-not-purchased and shown-but-not-clicked impressions.
+
+**Class imbalance:** purchase events are rare relative to impressions (e.g., 1 purchase per 100–500 impressions). Negatives are downsampled during training to avoid a degenerate "always predict negative" model.
+
+Caution: downsampling negatives biases the model's raw output probability upward relative to true production rates. If the ranking score is used anywhere as a calibrated probability rather than purely for relative ordering, apply a calibration correction (e.g., log-odds correction for the known sampling ratio) at serving time.
+
+---
 
 ### Offline
 
@@ -44,7 +72,7 @@ Explicitly defined as items the user eventually purchased (or another predefined
 
 K is determined by:
 
-- the ranker's latency budget (e.g., p99 ≤ 100 ms)
+- the ranker's latency budget
 - the catalog size
 
 The retrieval stage should return enough candidates for effective ranking while allowing the ranker to satisfy production latency constraints.
@@ -75,7 +103,6 @@ After deployment:
 
 - Recommendation-attributed CTR
 - Recommendation-attributed Purchase Rate
-- Recommendation-attributed GMV
 
 These are measured through online A/B testing before a full rollout.
 
@@ -127,23 +154,15 @@ Without proper attribution, the model learns general purchasing behavior rather 
 
 While optimizing the North Star metric, the following guardrails must remain healthy.
 
-## Catalog Coverage
+## Catalog Coverage — Deferred
 
-Ensure recommendations are distributed across a sufficiently large portion of the catalog rather than repeatedly recommending only popular items.
-
----
-
-## Diversity Distribution
-
-Monitor category concentration.
-
-If recommendations become overly concentrated in a small number of categories, introduce a reranking stage to improve diversity while preserving relevance.
+Not implemented as an enforced guardrail in this iteration. Revisit once the Similar Items widget has production traffic data — for a widget conditioned on a single anchor item, this would need to be redefined as per-anchor-item coverage (avoiding always recommending the same popular substitutes for a given item) rather than global catalog %.
 
 ---
 
 ## Recommendation CTR
 
-Monitor CTR as a click-bait detection signal.
+Monitor CTR as a click-bait detection signal. CTR is not a primary optimization target for this system (see problem-framing.md).
 
 CTR should improve together with purchase rate.
 
@@ -155,6 +174,6 @@ A rising CTR with flat or declining purchases may indicate the model is optimizi
 
 These should never be violated.
 
-- Recommendation latency must satisfy the production SLA (e.g., p99 ≤ 100 ms).
+- Recommendation latency must satisfy the production SLA.
 - Training-serving skew must remain within acceptable limits.
 - Recommendation attribution must use correctly attributed labels from recommendation surfaces only.
