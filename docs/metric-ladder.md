@@ -48,9 +48,6 @@ These labels are used to train the retrieval (candidate generation) model on cli
 - Positive: recommendation-attributed purchases (see Attribution Window Definition above).
 - Negative: shown but not purchased — includes both clicked-but-not-purchased and shown-but-not-clicked impressions.
 
-**Class imbalance:** purchase events are rare relative to impressions (e.g., 1 purchase per 100–500 impressions). Negatives are downsampled during training to avoid a degenerate "always predict negative" model.
-
-Caution: downsampling negatives biases the model's raw output probability upward relative to true production rates. If the ranking score is used anywhere as a calibrated probability rather than purely for relative ordering, apply a calibration correction (e.g., log-odds correction for the known sampling ratio) at serving time.
 
 ---
 
@@ -75,7 +72,7 @@ K is determined by:
 - the ranker's latency budget
 - the catalog size
 
-The retrieval stage should return enough candidates for effective ranking while allowing the ranker to satisfy production latency constraints.
+K is selected experimentally as the smallest candidate set that achieves near-saturated Recall while satisfying the end-to-end serving latency budget.
 
 ---
 
@@ -83,17 +80,24 @@ The retrieval stage should return enough candidates for effective ranking while 
 
 **NDCG@K**
 
+**Relevant item**
+
+A relevant item is defined as a recommendation-attributed purchase within the defined attribution window.
+
+**Choosing K**
+
 K is determined by the number of recommendation slots available on the recommendation surface.
 
 **Why NDCG?**
 
-NDCG supports **graded relevance**.
+The ranking model is trained to predict the probability of purchase. Therefore, offline evaluation should measure whether purchased items are ranked as highly as possible.
 
-For example:
+NDCG rewards placing relevant (purchased) items closer to the top of the ranked list while assigning less credit when they appear lower in the recommendations. This aligns with the ranking model's objective, since users are more likely to interact with items shown near the top of the recommendation widget.
 
-- Purchase > Wishlist > Click
+Binary relevance is used:
 
-Unlike MAP, NDCG rewards placing the most valuable user interactions closer to the top of the ranked list.
+* Relevant (1): Recommendation-attributed purchase
+* Not Relevant (0): All other recommended items
 
 ---
 

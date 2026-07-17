@@ -1,11 +1,25 @@
 
 ---
 
-Cold start:
+## Cold Start Handling
 
-Zero interactions → country-level bestsellers is the right call because you genuinely have nothing to work with yet. 
-One session event → session + content. 
-Enough history → full CF. And A/B testing to find the CF threshold empirically rather than guessing. 
+**New items at retrieval:** the item encoder is built on content features (image embedding, text embedding, category, brand, tags) rather than a learned item-ID embedding alone. A new item with no interaction history can still be encoded and placed into the ANN index from its content features the moment it's catalogued — it will retrieve and be retrieved based on content similarity until behavioral signal accumulates.
+
+**New items at ranking:** the ranker combines behavioral features (candidate historical CTR/CVR, which will be near-zero or missing for new items) with content-derived and cross features (retrieval similarity score, category/brand/price match against the anchor). A new candidate isn't starved of signal entirely — the retrieval similarity score and cross features still carry information; only the behavioral aggregates need smoothing/backoff toward a global or category-level prior until enough impressions accumulate.
+
+---
+
+## **Class Imbalance**
+
+**Retrieval**
+
+Retrieval uses contrastive learning, where multiple negatives per positive are expected. In-batch negatives efficiently provide a large and diverse set of negatives, so class imbalance is not treated as a modeling problem.
+
+**Ranking**
+ 
+Each recommendation impression naturally contains far more non-purchased than purchased candidates(e.g., 1 purchase per 200–500 impressions). 
+LambdaMART is designed for learning-to-rank under such settings, so the initial implementation trains on the full retrieved candidate set. 
+If dataset size becomes computationally prohibitive, negative downsampling can be introduced as a training optimization without changing the serving architecture.
 
 =============
 
