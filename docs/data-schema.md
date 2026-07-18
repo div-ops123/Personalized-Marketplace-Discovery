@@ -4,7 +4,7 @@
 
 ## Stage 1: Retrieval
 
-**Goal:** Narrow millions of items to ~500 plausible candidates fast.
+**Goal:** Narrow millions of items to ~200 plausible candidates fast.
 
 **Model:** Shared-weight Siamese (twin) item encoder. A single item-encoding network is run independently on the anchor item and on each candidate item — there is no User Tower. Similarity is the dot-product/cosine between the two independently-produced embeddings. This is an item-to-item design, matching the PDP "Similar Items" task ("which products are similar?") — personalization is deferred entirely to Stage 2.
 
@@ -121,20 +121,6 @@ This includes both clicked-but-not-purchased and shown-but-not-clicked candidate
 
 ### Position Bias Correction
 Log position and device for every impression. Apply Inverse Propensity Scoring (IPS) — weight each interaction by the inverse probability that the item at that position was actually seen. A click at position 8 on mobile carries more signal than a click at position 1, because surviving position 8 to get a click is stronger evidence of genuine preference.
-
-### Event & Impression Features
-| Feature | Type | Notes |
-|---|---|---|
-| Impression timestamp | Timestamp | Time of widget render |
-| Position in widget | Integer | Critical for position bias correction |
-| Dwell time | Continuous | Time spent on product page after click |
-| Event type | Categorical | Click / add-to-cart / purchase / save |
-
----
-
-## Feedback Loop & Logging
-
-**Label delay:** Click and add-to-cart recorded immediately. Purchase may have a checkout delay — log checkout completion timestamp separately and join on session/order ID. Do not assume purchase = click timestamp.
 
 ---
 

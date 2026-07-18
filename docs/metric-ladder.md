@@ -14,9 +14,10 @@ This directly measures the business value created by the recommendation system r
 
 ## Attribution Window Definition
 
-> A purchase counts as recommendation-attributed if it occurs within 24 hours of a click on an item from the Similar Items widget, provided no other attribution event (e.g., a subsequent search or direct navigation touch) overrides it.
+> A recommendation-attributed purchase is defined as a purchase occurring within 24 hours of a click on an item in the Similar Items widget. 
 
-24 hours is a starting assumption, not a validated business constant — buying cycles vary by product category (e.g., groceries vs. furniture). The precedence rule for what counts as an "overriding" event is also not yet fully specified (e.g., last-touch vs. any-touch across channels). Revisit both with business/product input once category-level purchase-cycle data is available.
+The 24-hour window is chosen as a reasonable starting assumption for a general e-commerce marketplace and should be validated using historical conversion data.
+The appropriate attribution window may vary by product category and business domain.
 
 ---
 
@@ -47,7 +48,6 @@ These labels are used to train the retrieval (candidate generation) model on cli
 
 - Positive: recommendation-attributed purchases (see Attribution Window Definition above).
 - Negative: shown but not purchased — includes both clicked-but-not-purchased and shown-but-not-clicked impressions.
-
 
 ---
 
