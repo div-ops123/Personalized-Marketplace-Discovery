@@ -63,6 +63,8 @@ Not items retrieval never produced.
 
 User ID is deliberately excluded: LightGBM/XGBoost don't jointly learn ID embeddings the way a neural model would, so personalization is carried through behavioral aggregates instead of a raw ID.
 
+Preferred brands, average purchase price, and historical category affinity are sourced from the User Daily Features snapshot table (see data-flow.md), joined strictly before the impression timestamp. Country and Device are read live from the request, not from this snapshot.
+
 ### Anchor Item Features
 (the item currently being viewed on the PDP)
 | Feature | Type | Notes |
@@ -80,9 +82,9 @@ User ID is deliberately excluded: LightGBM/XGBoost don't jointly learn ID embedd
 | Subcategory | Categorical | |
 | Brand | Categorical | |
 | Price | Continuous | |
-| Historical recommendation CTR | Continuous | Candidate-level (see below), point-in-time correct |
-| Historical recommendation CVR | Continuous | Candidate-level (see below), point-in-time correct |
-| Historical recommendation impressions | Continuous | Count of prior impressions for this candidate — indicates reliability of the CTR/CVR estimates; low-impression candidates need smoothing/backoff toward a global prior |
+| Historical recommendation CTR | Continuous | Candidate-level (see below); sourced from the Candidate Daily Features snapshot table (see data-flow.md), joined strictly before the impression |
+| Historical recommendation CVR | Continuous | Candidate-level (see below); sourced from the Candidate Daily Features snapshot table (see data-flow.md), joined strictly before the impression |
+| Historical recommendation impressions | Continuous | Count of prior impressions for this candidate, sourced from the same snapshot table — indicates reliability of the CTR/CVR estimates; low-impression candidates need smoothing/backoff toward a global prior |
 
 ### Anchor ↔ Candidate Cross Features
 | Feature | Notes |
@@ -99,12 +101,14 @@ User ID is deliberately excluded: LightGBM/XGBoost don't jointly learn ID embedd
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 ### Point-in-Time Correctness (Historical Rate Features)
-Every historical rate/count feature is computed using only recommendation interactions observed **before** the current recommendation's timestamp — never the current impression or any future interaction:
+Every historical rate/count feature is sourced from the Candidate Daily Features snapshot table (see data-flow.md), joined using the most recent snapshot **strictly before** the current recommendation's timestamp (`<`, not `<=`) — never the current impression, a same-day snapshot, or any future interaction:
 - **Historical CTR** must reflect clicks/impressions before this impression, not lifetime totals.
 - **Historical CVR** must only use purchases observed before this recommendation.
 - **Historical impressions** must count impressions seen before recommendation time, not lifetime impressions.
 
 Computing these without a strict as-of cutoff leaks future outcome information into training — the model will look correct offline and fail in production (label leakage, not just ordinary training-serving skew).
+
+Anchor/candidate category, brand, and price come from the Item Catalog, which is **not** point-in-time correct in v1 (current-state join only — known limitation, see data-flow.md).
 
 ### Candidate-Level, Not Pair-Level, Historical Rates
 Historical CTR/CVR are aggregated at the **candidate-item level**, across all anchors it has ever been recommended under — not per (anchor, candidate) pair. Pair-level rates would be too sparse: with up to 2M items, the anchor-candidate pair space is enormous and most pairs would have near-zero historical impressions.

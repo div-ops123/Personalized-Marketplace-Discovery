@@ -102,8 +102,8 @@ Both stages read from the same raw logs (Impression, Click, Purchase) but branch
 
 **Build:**
 1. `Impression Event LEFT JOIN Click Event` on `recommendation_impression_id` + `candidate_item_id` → `label = 1` if a click exists, else `0`.
-2. Join the **versioned item catalog** (see below) on `anchor_item_id`, as of the impression's timestamp, to pull anchor features.
-3. Join the same versioned item catalog on `candidate_item_id`, as of the impression's timestamp, to pull candidate features.
+2. Join the **Item Catalog** on `anchor_item_id` to pull anchor features (current-state join — see Known Limitation under Point-in-Time Correctness below).
+3. Join the **Item Catalog** on `candidate_item_id` to pull candidate features (same limitation applies).
 
 **Result — materialized in the warehouse:**
 
@@ -119,9 +119,9 @@ This table covers **exposure-derived pairs only.** In-batch negatives (other anc
 **Build:**
 1. Start from Impression Event (already scoped to the 20 exposed items).
 2. Join `recommendation_attributed_purchase` (from the Attribution step) on `user_id` + `candidate_item_id` + `recommendation_impression_id` → label.
-3. Join user behavioral aggregates (preferred brands, average purchase price, historical category affinity) as of the impression timestamp.
-4. Join the versioned item catalog for anchor features and candidate features, as of the impression timestamp.
-5. Join candidate historical CTR / CVR / impression-count from the daily pre-aggregated candidate stats table (most recent snapshot strictly before the impression date).
+3. Join **User Daily Features** on `user_id`, using `MAX(snapshot_date) < impression timestamp`.
+4. Join the **Item Catalog** for anchor features and candidate features (current-state join — see Known Limitation below).
+5. Join **Candidate Daily Features** on `candidate_id`, using `MAX(snapshot_date) < impression timestamp`.
 6. Compute cross features inline from the anchor and candidate features already in the row (not joined from storage — see below).
 
 **Result — materialized in the warehouse:**
@@ -141,23 +141,35 @@ This table covers **exposure-derived pairs only.** In-batch negatives (other anc
 
 ---
 
+## Offline Feature Store Shape
+
+Three source tables feed the dataset builders:
+
+| Table | Shape | Schema |
+|---|---|---|
+| Item Catalog | Current-state (operational) | `item_id, category, subcategory, brand, price, tags, image_embedding, text_embedding` — synced whenever catalog data changes |
+| User Daily Features | Historized (daily snapshots) | `snapshot_date, user_id, preferred_brands, avg_purchase_price, historical_category_affinity` |
+| Candidate Daily Features | Historized (daily snapshots) | `snapshot_date, candidate_id, recommendation_ctr, recommendation_cvr, recommendation_impressions` |
+
+**Online store:** holds only the latest row per `user_id` / `candidate_id`, overwritten by each day's batch job — sufficient for serving, which only ever needs "now."
+
+**Offline store:** retains the full history of daily snapshots for User Daily Features and Candidate Daily Features, append-only by `snapshot_date`, never overwritten. This is what makes it possible to reconstruct, at training time, exactly what serving would have read from the online store at a past impression's timestamp — the online store only ever holds "now," but the offline store holds every "now" that ever existed. The Item Catalog is not historized this way (see Known Limitation below).
+
 ## Point-in-Time Correctness
 
-Every join above that pulls a historical value is scoped to data available **before** the impression being labeled:
+For an impression logged at timestamp `T`, the dataset builder joins:
 
-| Source | Feature(s) | Rule |
-|---|---|---|
-| Purchase Table | Average purchase price, historical category affinity | Aggregate purchases before the impression |
-| Item Catalog | Anchor / candidate item features | Versioned catalog — join the row valid **as of the impression timestamp**, not the current catalog state |
-| Impression Table | Historical recommendation impressions | Count impressions before the impression |
-| Impression + Click | Historical recommendation CTR | `clicks / impressions`, using only data before the impression |
-| Impression + Attributed Purchase | Historical recommendation CVR | `attributed purchases / impressions`, using only data before the impression |
+- **User Daily Features / Candidate Daily Features:** `MAX(snapshot_date) < T` — strictly before, not `<=`. Strict inequality is what makes the join correct regardless of when the daily batch job actually runs relative to the day it's labeled for: a `<=` join risks matching a same-day snapshot that already includes events from later that day, including the very impression being labeled — leaking the outcome into a feature. `<` avoids that ambiguity outright.
+- **Item Catalog:** current-state join on `item_id` — not point-in-time correct (see Known Limitation below).
 
-**Why the item catalog needs versioning:** price and category can change over time (promotions, re-categorization). A plain current-state join would pull today's price into a training row from three months ago — leaking information the model never actually saw at serving time. The catalog needs an effective-dated (as-of) join, the same discipline already applied to the behavioral aggregates.
+**Why daily snapshots, not per-row exact recomputation:** recomputing these aggregates by scanning the full historical event log for every training row would be prohibitively expensive at 20–100M events/month, and unnecessary — user and candidate behavior shifts gradually over days, not within a day, so sub-day precision buys nothing. A daily pre-aggregation job caps staleness at one day and keeps the join cheap.
 
-**Why CTR/CVR/impression-count are daily snapshots, not per-row exact recomputation:** recomputing these aggregates by scanning the full historical event log for every training row would be prohibitively expensive at 20–100M events/month, and unnecessary — candidate-level click/purchase behavior shifts gradually over days, not within a day, so sub-day precision buys nothing. A daily pre-aggregation job caps staleness at one day and keeps the join cheap. "Point-in-time correct" here concretely means *as of the most recent daily snapshot before the impression*, not instant-level exactness — worth stating outright rather than implying exactness.
+**Refresh cadence: daily**, for both User Daily Features and Candidate Daily Features — matches the actual rate of change in the underlying behavior at this traffic scale, and avoids building real-time feature infrastructure before there's evidence it's needed. Revisit if a specific segment (e.g. flash-sale items) shows daily lag is measurably hurting ranking quality.
 
-**Refresh cadence: daily**, for the same reason — it matches the actual rate of change in the underlying behavior at this traffic scale, and avoids building real-time feature infrastructure before there's evidence it's needed. Revisit if a specific candidate segment (e.g. flash-sale items) shows daily lag is measurably hurting ranking quality.
+**Assumption:** 
+Item metadata (category, brand, tags and price) changes relatively infrequently compared to behavioral features. Therefore the initial implementation joins the current item catalog directly rather than maintaining historical catalog snapshots. If catalog changes become frequent (e.g., dynamic pricing or frequent re-categorization), the offline catalog can be extended to a versioned (SCD Type 2) table to enable point-in-time joins.
+
+**Known Limitation (v1): Item Catalog is not versioned.** Price and category can change over time (promotions, re-categorization), and the current-state join means historical training rows pull today's catalog values rather than what was true at the impression's timestamp — a real leakage risk for anchor/candidate category, brand, price, and the cross-features derived from them. Accepted as a known v1 limitation rather than blocking on it, since catalog changes are lower-frequency than behavioral drift. Revisit with an effective-dated (SCD2) catalog table if evidence shows item repricing or re-categorization is frequent enough to measurably affect ranking quality.
 
 ---
 

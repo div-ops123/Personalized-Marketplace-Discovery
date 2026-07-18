@@ -1,4 +1,49 @@
 
+These raw events land in **Snowflake** continuously via **Kinesis**.
+
+---
+
+**What the Spark batch job actually computes.**
+
+Spark reads the raw event table from Snowflake and computes per-user aggregations:
+
+- Categories purchased in the last 90 days → scan all purchase events for this user in the last 90 days, collect the categories
+- Average price point → average the item prices across all purchases
+- Preferred brands → count brand occurrences across purchases, take the top N
+- Time since last purchase → find the most recent purchase event timestamp
+
+One row per user comes out. These aggregations get written to Redis (online store) so the retrieval service can fetch them in under 10ms at serving time.
+
+---
+
+
+**Your encoder question — this is correct thinking.**
+
+Yes. Any preprocessing that happens before the model — categorical encoding, normalization, tokenization of text fields — must be identical between training and serving. If you normalize item price during training, you must normalize it the same way at serving time.
+
+The standard pattern: save your preprocessing pipeline as a versioned artifact alongside the model in the model registry. When you retrain with new data, you either reuse the existing preprocessing pipeline or version a new one alongside the new model. Never let the preprocessing pipeline and the model version drift from each other.
+
+For your two-tower model specifically: item description embeddings are pre-encoded offline using a frozen sentence transformer. That encoder object gets versioned. The normalization applied to price tiers gets versioned. The category encoding mappings get versioned. All travel together with the model version.
+
+---
+
+
+**3. Prediction scores (for monitoring):** request_id, item_id, retrieval similarity score, ranking model score. Written to Snowflake or S3 for offline evaluation and drift detection.
+
+(3) is used separately for monitoring — comparing model score distributions over time to detect drift.
+
+---
+
+Spark batch job daily → reads Snowflake raw events → computes user aggregates → writes to Redis online store (for next day's serving).
+
+Spark training job (weekly or triggered) → joins Snowflake serving logs with Snowflake interaction events → assembles point-in-time correct training dataset → trains new model → registers to model registry.
+
+New model deployed → shadow mode → canary → full traffic.
+
+---
+
+One nuance worth naming: within that 90-day window, apply recency decay as sample weights. A purchase from 5 days ago gets weight 1.0. A purchase from 85 days ago gets weight 0.2. The window is 90 days but the model is effectively learning more from recent behavior. This gives you the coverage of a long window with the recency emphasis of a short one.
+
 ---
 
 ## Cold Start Handling
