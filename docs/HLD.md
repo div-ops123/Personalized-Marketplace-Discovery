@@ -51,16 +51,6 @@ Final List (10–20 items) → API → User
 - **New item trigger:** The catalog service fires an event the moment a new item is created. That event triggers an embedding job — takes the new item's features, runs them through the frozen item tower, produces a vector, writes it directly into the ANN index without rebuilding the whole index.
 - **ANN index rebuild:** Not triggered per new item insert — too expensive. Incremental inserts handle new items in real time. Full rebuilds run when index drift (gap between current index recall and a fresh build) crosses a defined threshold. Index drift is the trigger, not a fixed weekly schedule, because ANN recall degrades unpredictably with volume of incremental inserts.
 
-#### User Side
-- Daily batch job reads interaction logs from the data warehouse, computes aggregate user features per user, writes to the user feature store.
-- Aggregate features: purchased categories (last 90 days), average price point of past purchases, preferred brands, time since last purchase.
-- These are stable signals. Daily refresh is sufficient.
-
-#### Real-Time Session Features
-- What the user has clicked or searched in the last 10 minutes of their current session.
-- Cannot live in a daily batch pipeline — too stale.
-- Events streamed from the website into a stream processor (Kafka + Flink or similar), aggregated per session, written to a low-latency session store readable at inference time.
-
 ---
 
 ### Online Path
@@ -81,11 +71,8 @@ When a user request arrives at the retrieval service:
 
 ### Feature Store Architecture
 
-| Store | Purpose | Latency | Examples |
-|---|---|---|---|
-| Data warehouse | Raw interaction logs for training | Seconds–minutes | BigQuery, Redshift |
-| Feature store | Pre-computed features for inference | < 10ms | Redis, DynamoDB, Feast |
-| Session store | Real-time session features | < 10ms | Redis, Flink output |
+| Store | Purpose | Latency 
+|---|---|---
 
 At inference time the retrieval service reads only from the feature store and session store — never directly from the data warehouse.
 
@@ -113,7 +100,6 @@ The third fallback requires no model, no feature store, no ANN search. It never 
 | Signal | Why it matters |
 |---|---|
 | P99 retrieval latency | Average latency hides the tail. 1% of requests at 800ms is felt by users even if average is 50ms |
-| Candidate diversity per request | Diversity collapse = early warning of feedback loop bias before it appears in business metrics |
 | New item coverage (last 7 days) | If new items stop appearing in any candidate sets, seller fairness guardrail is already broken |
 | ANN recall vs. brute-force | Periodically compare ANN results against exact search on a sample of requests. Growing gap = index needs rebuild |
 
@@ -322,15 +308,3 @@ Gradual traffic increase → 100%
 16. Logs flow to data warehouse for next training cycle
 17. Stream processor aggregates session events in real time for next request
 ```
-
----
-
-## Key Design Principles
-
-- **Latency constraint determines feature availability.** Features requiring real-time computation only at ranking stage. Retrieval relies on pre-computed cached features to meet sub-100ms budget.
-- **Retrieval learns coarse distinctions.** Relevant vs. irrelevant. Optimize for recall — missing a relevant item is unrecoverable downstream.
-- **Ranking learns fine distinctions.** Better vs. slightly worse among already-plausible candidates. Optimize for NDCG — position of relevant items matters.
-- **The gap between stages is your isolation layer for debugging.** Relevant item in retrieval candidates but ranked low → ranker problem. Never appeared in candidates → retrieval problem. Log both sides.
-- **Re-ranking separates model decisions from business decisions.** The model optimizes relevance. Re-ranking imposes diversity, novelty, and exploration as explicit product rules on top.
-- **Every fallback level is a design decision, not an afterthought.** Each level trades personalization quality for system availability in a controlled, predictable way.
-        
