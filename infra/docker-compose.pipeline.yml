@@ -16,7 +16,9 @@ x-airflow-common: &airflow-common
     POSTGRES_DB: ${POSTGRES_DB}
     PYTHONPATH: /opt/airflow/project
   volumes:
+    # my whole repo (..) is visible inside the container at /opt/airflow/project, so DAG code can import common.warehouse.
     - ..:/opt/airflow/project
+    # my pipelines/dags folder is mirrored to /opt/airflow/dags — the exact folder Airflow watches for DAG files. Edit a DAG file on your laptop in VS Code → Airflow sees the change immediately, no rebuild needed.
     - ../pipelines/dags:/opt/airflow/dags
   depends_on:
     postgres_airflow:

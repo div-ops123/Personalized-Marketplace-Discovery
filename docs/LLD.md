@@ -83,6 +83,22 @@ Within FAISS, the choice is **HNSW**, rejecting **IVF**:
 
 **Batch processing (daily features):** Spark on EMR. The daily feature computation job reads from Snowflake, aggregates interaction logs, and writes user/candidate feature aggregates back to the feature store. Runs on schedule via Airflow.
 
+### Why Spark?
+Because of data scale.
+Spark was chosen as the offline batch processing engine because it efficiently processes large-scale event logs in parallel, supports distributed joins and aggregations required for feature engineering, and scales beyond the limits of single-machine tools such as Pandas.
+
+**Rejected:** Pandas
+One machine. Doesn't scale to production event logs.
+Eventually `MemoryError`
+
+**Rejected:** SQL
+Can compute aggregations.
+But feature engineering becomes harder as pipelines grow.
+Not ideal for distributed Python transformations.
+
+**Rejected:** DuckDB/Polas
+Excellent for local workflows but not designed as a distributed processing engine for large production pipelines.
+
 ### Feature Store
 **Offline store: Snowflake.** No separate offline feature store needed at Series B/C — Snowflake serves as both data warehouse and offline feature layer, storing raw interaction logs, serving-time logged feature values, and assembled point-in-time-correct training datasets. Spark reads from Snowflake for both batch feature computation and training-data assembly. A dedicated offline feature store (Feast, Tecton) would add operational complexity without meaningful benefit at this scale.
 

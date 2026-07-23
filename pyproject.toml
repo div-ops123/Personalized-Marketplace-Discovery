@@ -1,0 +1,17 @@
+[project]
+name = "personalized-marketplace-discovery"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "faker>=40.32.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "psycopg2-binary>=2.9.12",
+    "pyspark",
+    "pytest>=9.1.1",
+    "python-dotenv>=1.2.2",
+    "snowflake-sqlalchemy>=1.11.0",
+    "sqlalchemy>=2.0.51",
+]
