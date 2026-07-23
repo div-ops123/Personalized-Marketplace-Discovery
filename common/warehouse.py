@@ -5,11 +5,14 @@ the same pipeline code runs against local Postgres (docker-compose) or
 real Snowflake (AWS demo session) with no code change.
 """
 
+import logging
 import os
 from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 
 class UnsupportedWarehouseBackendError(Exception):
@@ -110,4 +113,7 @@ def get_engine() -> Engine:
     """
     backend = os.environ.get("WAREHOUSE_BACKEND", "postgres")
     url = build_connection_url(backend)
-    return create_engine(url)
+    logger.debug("Connecting to %s backend.", backend)
+    # hide_parameters: a failed bulk insert would otherwise dump every row's
+    # values into the exception message, burying the actual error.
+    return create_engine(url, hide_parameters=True)
