@@ -3,7 +3,7 @@
 Run with the docker-compose Postgres warehouse already up, after
 generate_reference_data.py has populated item_catalog and users:
 
-    WAREHOUSE_BACKEND=postgres python data-gen/generate_events.py
+    WAREHOUSE_BACKEND=postgres python data_gen/generate_events.py
 """
 
 import argparse

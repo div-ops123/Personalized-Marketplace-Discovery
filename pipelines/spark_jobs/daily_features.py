@@ -16,12 +16,9 @@ from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
 
-TOP_N = 3
+from common.constants import ATTRIBUTION_WINDOW_HOURS
 
-# Must match data-gen/config.py's ATTRIBUTION_WINDOW_HOURS -- duplicated
-# rather than imported because data-gen's hyphenated directory name can't
-# be imported as a Python package.
-ATTRIBUTION_WINDOW_HOURS = 24
+TOP_N = 3
 
 _USER_FEATURE_COLUMNS = [
     "snapshot_date",

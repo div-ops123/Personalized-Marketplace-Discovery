@@ -2,7 +2,7 @@
 
 Run with the docker-compose Postgres warehouse already up:
 
-    WAREHOUSE_BACKEND=postgres python data-gen/generate_reference_data.py
+    WAREHOUSE_BACKEND=postgres python data_gen/generate_reference_data.py
 """
 
 import argparse

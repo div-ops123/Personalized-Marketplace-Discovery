@@ -2,7 +2,7 @@
 
 Phase 0 — Infra scaffolding
 
-1. Repo layout: /data-gen, /pipelines (Spark jobs + Airflow DAGs), /training, /serving, /infra (docker-compose files).
+1. Repo layout: /data_gen, /pipelines (Spark jobs + Airflow DAGs), /training, /serving, /infra (docker-compose files).
 2. docker-compose.pipeline.yml — Postgres (offline-store stand-in for Snowflake), Airflow (official Apache docker-compose, LocalExecutor is enough at this scale), Spark. At your data volume, running PySpark in local mode inside one container is simpler than a master/worker cluster and adds no demo value the cluster topology would — same reasoning as skipping EMR. Your call if you want the cluster look for the resume line.
 3. Warehouse connector: one data-access layer, backend selected by env var (WAREHOUSE_BACKEND=postgres|snowflake). Postgres is the default for local/docker-compose; Snowflake only gets wired in during the AWS recording session via env swap, no code change.
 
@@ -17,7 +17,6 @@ Phase 2 — Raw event simulation (the actual "historical data")
 7. Simulate PDP views over a multi-day window (suggest ~90 days, matching the rolling window already defined in LLD.md) — for each: pick an anchor item, build a ~200-candidate set using latent category/brand affinity + noise (this stands in for what retrieval will eventually learn), log Impression Events for the top 20 with position, device, country, retrieval_similarity_score.
 8. Generate Click Events: probability driven by user↔candidate latent affinity, decaying with position — this is what makes the IPS position-bias correction demonstrably do something later, instead of being inert code.
 9. Generate Purchase Events: some following a click within 24h (attributed), some purchases with no preceding click (organic/unattributed), some clicks that never convert. You need all three cases or the attribution join never exercises its False branch meaningfully.
-10. Reserve the last N days of the window as a time-based holdout — not a random split. This is also where the "time-based split" item left open in LLD.md finally gets resolved: train window vs. holdout window, defined by day, not shuffled.
 
 Phase 3 — The real pipeline (reused later as production DAG code)
 

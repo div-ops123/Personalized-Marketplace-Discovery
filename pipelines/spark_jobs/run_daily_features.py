@@ -2,7 +2,7 @@
 Features from raw events, validate, and write to the warehouse.
 
 Run standalone (bypassing Airflow) with the docker-compose Postgres
-warehouse already up, after data-gen/generate_events.py has populated the
+warehouse already up, after data_gen/generate_events.py has populated the
 raw event tables:
 
     WAREHOUSE_BACKEND=postgres uv run python pipelines/spark_jobs/run_daily_features.py --snapshot-date 2025-02-01

@@ -3,6 +3,8 @@
 import datetime
 import os
 
+from common.constants import ATTRIBUTION_WINDOW_HOURS  # noqa: F401 -- re-exported
+
 GLOBAL_SEED = int(os.environ.get("SYNTHETIC_DATA_SEED", "42"))
 
 N_ITEMS = 5000
@@ -30,7 +32,6 @@ PDP_VIEWS_PER_USER_PER_DAY_MEAN = 0.3
 
 CANDIDATE_POOL_SIZE = 200
 TOP_K_IMPRESSIONS = 20
-ATTRIBUTION_WINDOW_HOURS = 24
 
 # Gaussian noise added to cosine similarity when scoring/ranking candidates,
 # so candidate order isn't perfectly deterministic content-similarity rank.

@@ -7,7 +7,7 @@ day. Trigger a historical backfill with:
     docker compose -f infra/docker-compose.pipeline.yml exec airflow-scheduler \
         airflow dags backfill daily_feature_pipeline -s 2025-01-01 -e 2025-04-01
 
-start_date/end_date below must match data-gen/config.py's
+start_date/end_date below must match data_gen/config.py's
 SIMULATION_START_DATE (2025-01-01, 90-day SIMULATION_WINDOW_DAYS -> last
 raw-event day is 2025-03-31). end_date is one day past that so the final
 backfilled snapshot_date (2025-04-01) reflects the complete 90-day history

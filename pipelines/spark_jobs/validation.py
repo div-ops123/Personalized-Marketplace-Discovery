@@ -9,57 +9,13 @@ never writes) if either list is non-empty, matching DAG 1's documented
 
 import pandas as pd
 
+from common.taxonomy import ALL_BRANDS, CATEGORIES
+
 MIN_COVERAGE = 0.99
 TOP_N = 3
 
-# Must match data-gen/taxonomy.py's CATEGORIES/ALL_BRANDS -- duplicated
-# rather than imported because data-gen's hyphenated directory name can't
-# be imported as a Python package (see daily_features.py's
-# ATTRIBUTION_WINDOW_HOURS for the same tradeoff).
-_VALID_CATEGORIES = {
-    "Footwear",
-    "Electronics",
-    "Apparel",
-    "Home",
-    "Beauty",
-    "Sports",
-    "Toys",
-    "Books",
-}
-_VALID_BRANDS = {
-    "Nike",
-    "Adidas",
-    "New Balance",
-    "Vans",
-    "Sony",
-    "Anker",
-    "JBL",
-    "Samsung",
-    "Levi's",
-    "Uniqlo",
-    "Patagonia",
-    "Champion",
-    "IKEA",
-    "Lodge",
-    "Philips",
-    "Brooklinen",
-    "CeraVe",
-    "Olaplex",
-    "The Ordinary",
-    "Dove",
-    "Coleman",
-    "Trek",
-    "Lululemon",
-    "REI",
-    "LEGO",
-    "Hasbro",
-    "Mattel",
-    "Ravensburger",
-    "Penguin",
-    "Scholastic",
-    "HarperCollins",
-    "Vintage",
-}
+_VALID_CATEGORIES = set(CATEGORIES)
+_VALID_BRANDS = set(ALL_BRANDS)
 
 
 def _check_nulls(df: pd.DataFrame, table_name: str, columns: list[str]) -> list[str]:
