@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "psycopg2-binary>=2.9.12",
+    "pyarrow>=25.0.0",
     "pyspark",
     "pytest>=9.1.1",
     "python-dotenv>=1.2.2",
