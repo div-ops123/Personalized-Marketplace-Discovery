@@ -124,6 +124,11 @@ def main(snapshot_date: datetime.date) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    load_dotenv(override=True)
+    # override=False (the default): inside the Airflow container, docker-compose
+    # already injects the correct POSTGRES_HOST/POSTGRES_PORT for the container
+    # network (postgres_warehouse:5432). The repo's .env (bind-mounted here too)
+    # holds host-machine values (localhost:5433) for running this script directly
+    # on the host -- it must only fill gaps, never clobber real container env vars.
+    load_dotenv()
     args = parse_args()
     main(args.snapshot_date)
