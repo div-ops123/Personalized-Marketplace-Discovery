@@ -1,0 +1,29 @@
+# Local MLflow tracking server for Phase 5 experimentation (docs/build-phases.md
+# step 15). Separate from docker-compose.pipeline.yml: no dependency on
+# postgres_warehouse, and a different lifecycle -- you can build datasets
+# without this running, and train/retrain against it without touching
+# Airflow. Same "split compose files by concern" pattern this repo already
+# plans to repeat for docker-compose.serving.yml (Phase 6).
+#
+# Bring up: docker compose -f infra/docker-compose.mlflow.yml up -d
+# UI: http://localhost:5001
+#
+# SQLite backend store + local filesystem artifact store, both under one
+# named volume -- no S3/RDS. Only MLFLOW_TRACKING_URI changes when this
+# moves to EC2 later; training/ code never hardcodes this URL.
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.14.0
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/store/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+    ports:
+      - "5001:5000"
+    volumes:
+      - mlflow_data:/mlflow
+
+volumes:
+  mlflow_data:
