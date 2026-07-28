@@ -62,3 +62,33 @@ TAXONOMY = {
 
 CATEGORIES = list(TAXONOMY.keys())
 ALL_BRANDS = sorted({brand for spec in TAXONOMY.values() for brand in spec["brands"]})
+PRICE_TIERS = ["budget", "mid", "premium"]
+
+
+def price_tier(price: float, category: str) -> str:
+    """Buckets a price into budget/mid/premium within its category's own range.
+
+    Categories have very different price scales (a $40 book and a $40 pair
+    of sneakers don't mean the same thing), so the bucket is computed
+    relative to that category's own price_range, split into equal thirds --
+    a pure function of already-known constants, safe to call identically at
+    training-dataset-build time and at item-encoding/serving time (see
+    data-flow.md's "Computed Inline vs. Stored").
+
+    Args:
+        price: The item's price.
+        category: A category name present in TAXONOMY.
+
+    Returns:
+        str: One of PRICE_TIERS.
+
+    Raises:
+        KeyError: If category is not in TAXONOMY.
+    """
+    low, high = TAXONOMY[category]["price_range"]
+    width = (high - low) / 3
+    if price < low + width:
+        return "budget"
+    if price < low + 2 * width:
+        return "mid"
+    return "premium"
