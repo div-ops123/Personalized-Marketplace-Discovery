@@ -191,13 +191,22 @@ def main(args: argparse.Namespace) -> None:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             log_preprocessing_artifacts(vocabs, Path(tmp_dir))
-        mlflow.pytorch.log_model(model, "model")
+        # serialization_format="pickle": MLflow 3.x defaults to "pt2"
+        # (torch.export tracing), which requires an input_example and can't
+        # trace a dict-input forward() like ItemEncoder's. "pickle" matches
+        # the original, simpler save behavior and needs no example input.
+        mlflow.pytorch.log_model(model, name="retrieval_encoder", serialization_format="pickle")
 
     logger.info("Retrieval training complete in %.1fs. best_val_recall_at_%d=%.4f", elapsed, args.recall_k, best_recall)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # force=True: mlflow/torch's own imports (above) already attach a
+    # handler to the root logger, which makes a plain basicConfig() a
+    # silent no-op -- this script's own INFO logs would never print.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True
+    )
     # override=False (the default): see run_dataset_builders.py's docstring --
     # container-injected env vars must win over the bind-mounted .env.
     load_dotenv()

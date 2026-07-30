@@ -100,7 +100,10 @@ def main(args: argparse.Namespace) -> None:
         # whose bespoke PyTorch loop has no such autolog flavor and logs
         # train_loss/val_recall_at_200 manually -- an intentional asymmetry
         # between the two scripts, not an inconsistency.
-        mlflow.lightgbm.autolog()
+        # log_models=False: autolog's own model artifact is unnamed ("model"),
+        # indistinguishable from retrieval_train.py's in the MLflow UI --
+        # logged explicitly below instead, under a descriptive name.
+        mlflow.lightgbm.autolog(log_models=False)
 
         booster = train_lambdamart(
             x_train,
@@ -117,6 +120,7 @@ def main(args: argparse.Namespace) -> None:
         val_predictions = booster.predict(x_val)
         val_ndcg = ndcg_at_k(y_val, val_predictions, group_val, k=args.ndcg_k)
         mlflow.log_metric("val_ndcg_at_20", val_ndcg)
+        mlflow.lightgbm.log_model(booster, name="ranking_lambdamart")
 
         log_reproducibility_metadata(engine, "ranking_training_examples")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -129,7 +133,12 @@ def main(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # force=True: mlflow's own imports (above) already attach a handler to
+    # the root logger, which makes a plain basicConfig() a silent no-op --
+    # this script's own INFO logs would never print.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True
+    )
     # override=False (the default): see run_dataset_builders.py's docstring --
     # container-injected env vars must win over the bind-mounted .env.
     load_dotenv()
