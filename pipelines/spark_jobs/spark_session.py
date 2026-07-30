@@ -30,6 +30,21 @@ def get_spark_session(app_name: str = "daily_feature_pipeline", master: str = "l
     Returns:
         SparkSession: A local-mode session.
     """
-    spark = SparkSession.builder.appName(app_name).master(master).config("spark.ui.enabled", "false").getOrCreate()
+    spark = (
+        SparkSession.builder.appName(app_name)
+        .master(master)
+        .config("spark.ui.enabled", "false")
+        # Default driver heap (1g) OOMs on run_dataset_builders.py's full-history
+        # collect()/toPandas() calls once real event volume (not tiny unit-test
+        # fixtures) is involved. local[*] mode runs driver+executors in one JVM,
+        # so only spark.driver.memory needs raising here.
+        .config("spark.driver.memory", "8g")
+        # Default cap (1g) on how much a toPandas()/collect() may return to
+        # the driver -- the retrieval dataset alone serializes to several GB
+        # once per-row anchor+candidate text_embedding arrays are included
+        # across 1.6M+ impression rows.
+        .config("spark.driver.maxResultSize", "6g")
+        .getOrCreate()
+    )
     spark.sparkContext.setLogLevel("WARN")
     return spark

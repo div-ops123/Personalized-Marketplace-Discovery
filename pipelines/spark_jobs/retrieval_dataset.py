@@ -35,7 +35,10 @@ _OUTPUT_COLUMNS = [
     "label",
 ]
 
-_ARRAY_COLUMNS = [
+# Public: dataset_db_io's chunked writer needs this to fix up array<...>
+# columns the same way per-chunk that build_retrieval_dataset does for its
+# single-shot toPandas() below.
+ARRAY_COLUMNS = [
     "anchor_tags",
     "anchor_image_embedding",
     "anchor_text_embedding",
@@ -71,13 +74,19 @@ def _item_features(spark: SparkSession, items_df: pd.DataFrame, prefix: str) -> 
     return df
 
 
-def build_retrieval_dataset(
+def build_retrieval_spark_df(
     spark: SparkSession,
     impressions_df: pd.DataFrame,
     clicks_df: pd.DataFrame,
     items_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """Builds the full Retrieval Dataset from raw events and the item catalog.
+) -> SparkDataFrame | None:
+    """Builds the full Retrieval Dataset as a Spark DataFrame (no driver collect).
+
+    Same transform as build_retrieval_dataset, but stops short of
+    toPandas() -- run_dataset_builders.py streams this back to the driver
+    in bounded chunks via dataset_db_io's chunked writer instead of
+    collecting the whole (multi-GB, once real event volume is involved)
+    result at once.
 
     Args:
         spark: An active SparkSession.
@@ -89,13 +98,12 @@ def build_retrieval_dataset(
             dataset_db_io.read_full_item_catalog).
 
     Returns:
-        pd.DataFrame: One row per (recommendation_impression_id,
+        SparkDataFrame | None: One row per (recommendation_impression_id,
             candidate_item_id) -- anchor_features, candidate_features,
-            label. Empty (with the right columns) if there are no
-            impressions yet.
+            label. None if there are no impressions yet.
     """
     if impressions_df.empty:
-        return pd.DataFrame(columns=_OUTPUT_COLUMNS)
+        return None
 
     impressions = spark.createDataFrame(impressions_df)
     clicks = spark.createDataFrame(clicks_df) if not clicks_df.empty else None
@@ -122,10 +130,40 @@ def build_retrieval_dataset(
         .drop(candidate_items["item_id"])
     )
 
-    result_df = result.select(*_OUTPUT_COLUMNS).toPandas()
+    return result.select(*_OUTPUT_COLUMNS)
+
+
+def build_retrieval_dataset(
+    spark: SparkSession,
+    impressions_df: pd.DataFrame,
+    clicks_df: pd.DataFrame,
+    items_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Builds the full Retrieval Dataset from raw events and the item catalog.
+
+    Args:
+        spark: An active SparkSession.
+        impressions_df: The full impression_events log (see
+            dataset_db_io.read_all_impressions) -- not filtered to a time
+            window; this builder rebuilds the whole dataset each run.
+        clicks_df: The full click_events log.
+        items_df: The full item catalog, including embeddings (see
+            dataset_db_io.read_full_item_catalog).
+
+    Returns:
+        pd.DataFrame: One row per (recommendation_impression_id,
+            candidate_item_id) -- anchor_features, candidate_features,
+            label. Empty (with the right columns) if there are no
+            impressions yet.
+    """
+    spark_df = build_retrieval_spark_df(spark, impressions_df, clicks_df, items_df)
+    if spark_df is None:
+        return pd.DataFrame(columns=_OUTPUT_COLUMNS)
+
+    result_df = spark_df.toPandas()
     # With Arrow-based conversion enabled, toPandas() represents Spark
     # array<...> columns as numpy.ndarray per row -- psycopg2 can't adapt
     # that to a Postgres ARRAY column, only a plain Python list.
-    for column in _ARRAY_COLUMNS:
+    for column in ARRAY_COLUMNS:
         result_df[column] = result_df[column].apply(lambda v: list(v) if v is not None else None)
     return result_df
