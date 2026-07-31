@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 import torch
 
-from training.retrieval_model import contrastive_loss
-from training.retrieval_preprocessing import sample_training_batch
+from common.taxonomy import CATEGORIES
+from training.retrieval_model import ItemEncoder, contrastive_loss
+from training.retrieval_preprocessing import embed_catalog, sample_training_batch
+from training.vocab import build_item_id_vocab, build_taxonomy_vocabs
 
 
 def _synthetic_retrieval_df(n_impressions: int = 20, candidates_per_impression: int = 4) -> pd.DataFrame:
@@ -75,6 +77,48 @@ def test_contrastive_loss_masks_invalid_hard_negatives():
     # Real (valid) hard negatives add extra negative mass to the
     # denominator, so the loss must differ from the fully-masked case.
     assert not torch.isclose(loss_with_negs, loss_all_masked, atol=1e-6)
+
+
+def _synthetic_catalog(n_items: int = 6) -> pd.DataFrame:
+    rows = []
+    for i in range(n_items):
+        category = CATEGORIES[i % len(CATEGORIES)]
+        rows.append(
+            {
+                "item_id": f"item_{i}",
+                "category": category,
+                "subcategory": "Sneakers" if category == "Footwear" else "Fiction",
+                "brand": "Nike" if category == "Footwear" else "Penguin",
+                "price": 50.0,
+                "tags": ["casual"],
+                "image_embedding": None,
+                "text_embedding": [0.1] * 8,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_embed_catalog_shape_and_row_order():
+    catalog_df = _synthetic_catalog(n_items=6)
+    vocabs = build_taxonomy_vocabs()
+    vocabs["item_id"] = build_item_id_vocab(catalog_df["item_id"])
+    vocab_sizes = {
+        "item_id": len(vocabs["item_id"]),
+        "category": len(vocabs["category"]),
+        "subcategory": len(vocabs["subcategory"]),
+        "brand": len(vocabs["brand"]),
+        "price_tier": len(vocabs["price_tier"]),
+    }
+    model = ItemEncoder(vocab_sizes, num_tags=len(vocabs["tags"]), text_dim=8, image_dim=8, embedding_dim=16)
+    model.eval()
+
+    embeddings = embed_catalog(model, catalog_df, vocabs, image_dim=8)
+
+    assert embeddings.shape == (6, 16)
+    # embed_catalog must not reorder or drop rows -- callers (recall_at_k,
+    # serving/build_retrieval_index.py) rely on positional alignment with
+    # catalog_df's own item_id column.
+    assert torch.allclose(torch.linalg.norm(embeddings, dim=-1), torch.ones(6), atol=1e-5)
 
 
 def test_contrastive_loss_diagonal_targets_are_correct():

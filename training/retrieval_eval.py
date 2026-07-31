@@ -17,47 +17,11 @@ candidates).
 
 import numpy as np
 import pandas as pd
-import torch
 from torch import nn
 
-from common.taxonomy import price_tier
 from training.constants import RETRIEVAL_RECALL_K
-from training.retrieval_preprocessing import encode_item_side
+from training.retrieval_preprocessing import embed_catalog
 from training.vocab import Vocabulary
-
-_CATALOG_RENAME = {
-    "item_id": "gallery_item_id",
-    "category": "gallery_category",
-    "subcategory": "gallery_subcategory",
-    "brand": "gallery_brand",
-    "price_tier": "gallery_price_tier",
-    "tags": "gallery_tags",
-    "text_embedding": "gallery_text_embedding",
-    "image_embedding": "gallery_image_embedding",
-}
-
-
-def _embed_catalog_slice(
-    model: nn.Module, catalog_slice: pd.DataFrame, vocabs: dict[str, Vocabulary], image_dim: int
-) -> torch.Tensor:
-    """Computes price_tier, renames to the "gallery_" prefix, and embeds.
-
-    Args:
-        model: A trained (or in-training) ItemEncoder.
-        catalog_slice: item_catalog rows (any subset), unprefixed columns.
-        vocabs: Vocabularies for encode_item_side.
-        image_dim: Image embedding dimension.
-
-    Returns:
-        torch.Tensor: (len(catalog_slice), embedding_dim), row-aligned with
-            catalog_slice.
-    """
-    renamed = catalog_slice.copy()
-    renamed["price_tier"] = [price_tier(p, c) for p, c in zip(renamed["price"], renamed["category"])]
-    renamed = renamed.rename(columns=_CATALOG_RENAME)
-    with torch.no_grad():
-        features = encode_item_side(renamed, "gallery", vocabs, image_dim)
-        return model(features)
 
 
 def recall_at_k(
@@ -92,14 +56,14 @@ def recall_at_k(
         return float("nan")
     purchased_by_anchor = positives.groupby("anchor_item_id")["candidate_item_id"].apply(set).to_dict()
 
-    gallery_embeddings = _embed_catalog_slice(model, item_catalog_df, vocabs, image_dim)
+    gallery_embeddings = embed_catalog(model, item_catalog_df, vocabs, image_dim)
     gallery_item_ids = item_catalog_df["item_id"].tolist()
 
     anchor_ids = list(purchased_by_anchor.keys())
     anchor_catalog = item_catalog_df[item_catalog_df["item_id"].isin(anchor_ids)]
     if anchor_catalog.empty:
         return float("nan")
-    anchor_embeddings = _embed_catalog_slice(model, anchor_catalog, vocabs, image_dim)
+    anchor_embeddings = embed_catalog(model, anchor_catalog, vocabs, image_dim)
     anchor_item_ids = anchor_catalog["item_id"].tolist()
 
     similarities = anchor_embeddings @ gallery_embeddings.T

@@ -30,7 +30,7 @@ Phase 4 — Dataset assembly
 
 Phase 5 — Experimentation (local PC)
 
-15. Train the retrieval encoder — Train the LambdaMART ranker. Log both to MLflow (local EC2 or local Docker MLflow — your call when you get there).
+15. Train the retrieval encoder — Train the LambdaMART ranker. Log both to MLflow (local Docker MLflow).
 no cold-start content-similarity bootstrap first, that's just documented thinking. i train the models with behavioral click-pairs we simulated.
 16. Build the FAISS/HNSW index from the trained encoder's item embeddings.
 

@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 docs/notes/
+
+# Generated FAISS/HNSW retrieval index artifacts (serving/build_retrieval_index.py) --
+# binary, rebuildable from an MLflow run, not source.
+serving/index/

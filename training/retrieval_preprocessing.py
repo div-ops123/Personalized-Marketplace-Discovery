@@ -15,8 +15,26 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 
+from common.taxonomy import price_tier
 from training.vocab import Vocabulary, multi_hot_encode
+
+# Renames a raw item_catalog_df (item_id, category, ..., price) to the
+# "gallery_" prefix encode_item_side expects -- shared by retrieval_eval.py's
+# Recall@K gallery embedding and serving/build_retrieval_index.py's full-
+# catalog embedding, both of which embed the catalog itself rather than
+# retrieval_training_examples's anchor_*/candidate_* pairs.
+CATALOG_RENAME = {
+    "item_id": "gallery_item_id",
+    "category": "gallery_category",
+    "subcategory": "gallery_subcategory",
+    "brand": "gallery_brand",
+    "price_tier": "gallery_price_tier",
+    "tags": "gallery_tags",
+    "text_embedding": "gallery_text_embedding",
+    "image_embedding": "gallery_image_embedding",
+}
 
 
 @dataclass
@@ -128,6 +146,34 @@ def encode_item_side(
         image_embedding=image_embedding,
         image_missing=image_missing,
     )
+
+
+def embed_catalog(
+    model: nn.Module, catalog_df: pd.DataFrame, vocabs: dict[str, Vocabulary], image_dim: int
+) -> torch.Tensor:
+    """Embeds a raw item_catalog_df (or any subset of it) through the encoder.
+
+    catalog_df has no price_tier column (it's computed downstream from
+    price/category, see common.taxonomy.price_tier) and unprefixed column
+    names -- both are fixed up here before delegating to encode_item_side.
+
+    Args:
+        model: A trained (or in-training) ItemEncoder.
+        catalog_df: item_catalog rows (any subset), unprefixed columns, as
+            returned by training/db_io.py's read_full_item_catalog.
+        vocabs: Vocabularies for encode_item_side.
+        image_dim: Image embedding dimension.
+
+    Returns:
+        torch.Tensor: (len(catalog_df), embedding_dim), row-aligned with
+            catalog_df.
+    """
+    renamed = catalog_df.copy()
+    renamed["price_tier"] = [price_tier(p, c) for p, c in zip(renamed["price"], renamed["category"])]
+    renamed = renamed.rename(columns=CATALOG_RENAME)
+    with torch.no_grad():
+        features = encode_item_side(renamed, "gallery", vocabs, image_dim)
+        return model(features)
 
 
 @dataclass
