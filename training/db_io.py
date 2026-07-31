@@ -49,6 +49,45 @@ def read_impression_timestamps(engine: Engine) -> pd.DataFrame:
     )
 
 
+def read_user_daily_features(engine: Engine) -> pd.DataFrame:
+    """Reads the full, historized user_daily_features table.
+
+    Returns every snapshot_date's rows -- callers wanting only the latest
+    snapshot per user (e.g. serving/export_feature_snapshot.py) must dedupe
+    themselves; training never reads this table directly (the offline
+    dataset builder already point-in-time-joined it into
+    ranking_training_examples).
+
+    Returns:
+        pd.DataFrame: snapshot_date, user_id, preferred_brands,
+            avg_purchase_price, historical_category_affinity columns,
+            per pipelines/spark_jobs/features_schema.py.
+    """
+    return pd.read_sql(
+        "SELECT snapshot_date, user_id, preferred_brands, avg_purchase_price, "
+        "historical_category_affinity FROM user_daily_features",
+        engine,
+    )
+
+
+def read_candidate_daily_features(engine: Engine) -> pd.DataFrame:
+    """Reads the full, historized candidate_daily_features table.
+
+    Returns every snapshot_date's rows -- see read_user_daily_features's
+    docstring for why dedup-to-latest is left to the caller.
+
+    Returns:
+        pd.DataFrame: snapshot_date, candidate_id, recommendation_ctr,
+            recommendation_cvr, recommendation_impressions columns, per
+            pipelines/spark_jobs/features_schema.py.
+    """
+    return pd.read_sql(
+        "SELECT snapshot_date, candidate_id, recommendation_ctr, recommendation_cvr, "
+        "recommendation_impressions FROM candidate_daily_features",
+        engine,
+    )
+
+
 def read_full_item_catalog(engine: Engine) -> pd.DataFrame:
     """Reads the full item catalog -- the retrieval eval gallery.
 

@@ -1,0 +1,65 @@
+# Phase 6 serving path (docs/build-phases.md step 17) -- "the profile
+# anyone can clone and click around without touching Postgres/Airflow/
+# Spark at all." No Postgres/Airflow/Spark/MLflow service here: all three
+# containers load static exports (serving/index/, serving/ranking/,
+# serving/features/) produced once by build_retrieval_index.py,
+# export_ranking_model.py, and export_feature_snapshot.py -- run those
+# manually first (see their docstrings), then:
+#
+#   docker compose -f infra/docker-compose.serving.yml up -d --build
+#   curl "http://localhost:8000/recommendations?anchor_item_id=<ID>&user_id=<UID>"
+#
+# Same "split compose files by concern" pattern as
+# docker-compose.mlflow.yml/docker-compose.pipeline.yml -- independent
+# lifecycle, no dependency on either.
+services:
+  retrieval-service:
+    build:
+      context: ..
+      dockerfile: infra/serving/Dockerfile
+    command: uvicorn serving.retrieval_service.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../serving/index:/app/serving/index:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ranking-service:
+    build:
+      context: ..
+      dockerfile: infra/serving/Dockerfile
+    command: uvicorn serving.ranking_service.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../serving/ranking:/app/serving/ranking:ro
+      - ../serving/features:/app/serving/features:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: infra/serving/Dockerfile
+    command: uvicorn serving.api_gateway.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../serving/features:/app/serving/features:ro
+    environment:
+      RETRIEVAL_SERVICE_URL: http://retrieval-service:8001
+      RANKING_SERVICE_URL: http://ranking-service:8002
+    depends_on:
+      retrieval-service:
+        condition: service_healthy
+      ranking-service:
+        condition: service_healthy

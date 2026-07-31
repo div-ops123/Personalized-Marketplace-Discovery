@@ -1,7 +1,7 @@
 """Serving-specific constants -- scoped to serving/, kept out of
-training/constants.py since these govern the ANN index this repo's future
-Retrieval Service (docs/build-phases.md Phase 6) will read, not anything
-training/ itself produces or consumes.
+training/constants.py since these govern the ANN index and the Phase 6
+serving path (docs/build-phases.md), not anything training/ itself
+produces or consumes.
 """
 
 from pathlib import Path
@@ -17,3 +17,19 @@ HNSW_EF_CONSTRUCTION = 200
 HNSW_EF_SEARCH = 128
 
 DEFAULT_INDEX_DIR = Path("serving") / "index"
+
+# Phase 6 serving-path artifact dirs -- static exports the serving
+# containers mount read-only, produced by export_ranking_model.py and
+# export_feature_snapshot.py. No live Postgres/MLflow dependency at
+# request time (see docs/build-phases.md Phase 6's "clone and click
+# around without touching Postgres/Airflow/Spark at all").
+DEFAULT_RANKING_DIR = Path("serving") / "ranking"
+DEFAULT_FEATURES_DIR = Path("serving") / "features"
+
+# Internal docker-compose network ports (docker-compose.serving.yml).
+RETRIEVAL_SERVICE_PORT = 8001
+RANKING_SERVICE_PORT = 8002
+API_GATEWAY_PORT = 8000
+
+DEFAULT_RETRIEVAL_K = 200
+DEFAULT_RESULT_K = 20
