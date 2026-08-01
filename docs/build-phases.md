@@ -36,7 +36,7 @@ no cold-start content-similarity bootstrap first, that's just documented thinkin
 
 Phase 6 — Serving path (the lightweight, visitor-facing docker-compose)
 
-17. Separate docker-compose.serving.yml: API Gateway + Retrieval Service + Ranking Service + Redis + mounted FAISS index + trained model artifacts. This is the profile anyone can clone and click around without touching Postgres/Airflow/Spark at all.
+17. Separate docker-compose.serving.yml: API Gateway + Retrieval Service + Ranking Service, each mounting a static export (FAISS index + item_ids.json, the exported LambdaMART model.txt, and a Postgres feature/catalog snapshot as JSON) written once by an export script, no live DB. Chosen over standing up Redis: there's no online feature store anywhere else in this project, and adding one here would mean a new piece of infra just to demo serving, plus a live dependency (Redis, and MLflow for the model) that the containers would need up and healthy just to answer a request. A one-time export mirrors the FAISS index's existing build-once-mount-forever pattern and keeps this profile genuinely self-contained. This is the profile anyone can clone and click around without touching Postgres/Airflow/Spark/MLflow at all.
 
 Phase 7 — CI/CD + AWS recording
 

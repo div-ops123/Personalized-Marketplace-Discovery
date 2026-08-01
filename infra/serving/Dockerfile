@@ -8,6 +8,13 @@
 # need.
 FROM python:3.11-slim
 
+# libgomp1 (GNU OpenMP runtime) -- lightgbm's native library dlopen()s it
+# at import time; python:3.11-slim doesn't ship it, so the Ranking
+# Service crashes on startup without this (OSError: libgomp.so.1: cannot
+# open shared object file).
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # COPY --from=ghcr.io/astral-sh/uv:0.9.7 /uv /uvx /bin/
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 

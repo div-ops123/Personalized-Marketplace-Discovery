@@ -100,7 +100,14 @@ def encode_ranking_examples(
         features[column] = df[column].astype("category")
 
     for column in _CONTINUOUS_COLUMNS:
-        features[column] = df[column]
+        # pd.to_numeric (not a raw passthrough): training batches span many
+        # query groups so a NULL column always has some real value forcing
+        # pandas to infer float64. A single online ranking request can have
+        # a column that's 100% None (e.g. one unknown user -> every row's
+        # user_avg_purchase_price is None) -- with nothing to force the
+        # upcast, pandas leaves that as dtype object, which LightGBM's
+        # predict() rejects even though the values are legitimately NaN.
+        features[column] = pd.to_numeric(df[column], errors="coerce")
 
     features["user_features_missing"] = df["user_preferred_brands"].isna().astype(int)
 
