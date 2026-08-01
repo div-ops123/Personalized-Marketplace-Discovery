@@ -113,9 +113,9 @@ Excellent for local workflows but not designed as a distributed processing engin
 
 **Rejected Weights & Biases:** stronger experiment-tracking UX, but SaaS-only — training data and model metadata would leave the AWS environment. For a marketplace handling user behavioral data, keeping ML artifacts inside owned infrastructure is the safer default. Revisit if team size and collaboration overhead justify external tooling.
 
-**Model registry: MLflow Model Registry.** Stages: Staging → Production → Archived. Each version includes model weights, preprocessing artifacts (encoders, normalizers), and a model card (dataset description, offline metrics, feature schema, known limitations). Promoting a new production model archives the old one, available for instant rollback without retraining.
+**Model registry: MLflow Model Registry.** Aliases + tags (MLflow 3.x), not the deprecated Staging/Production/Archived stage API: a winning candidate is registered and aliased `challenger`; a separate manual-review step reassigns the `champion` alias to it. Each version includes model weights, preprocessing artifacts (encoders, normalizers), and a model card (dataset description, offline metrics, feature schema, known limitations). Promoting a new champion doesn't archive the old version — it simply stops being aliased `champion` — so every prior version stays registered and instantly reachable for rollback without retraining.
 
-**Promotion gate:** the Validation Pipeline (see DAG Structure below) evaluates the training run's candidate model against a fixed, held-out test set — not the rolling window DAG 2 trains on — alongside a fresh re-evaluation of the current production model on that same set, so the comparison isn't skewed by scoring the two models on different data. A model registers to Staging only if Recall@200 ≥ threshold AND NDCG@K ≥ the current production model's freshly-measured score (or, if no production model exists yet, Recall@200 ≥ threshold alone). Manual review is required before promotion from Staging to Production.
+**Promotion gate:** the Validation Pipeline (see DAG Structure below) evaluates the training run's candidate model against a fixed, held-out test set — not the rolling window DAG 2 trains on — alongside a fresh re-evaluation of the current `champion`-aliased model on that same set, so the comparison isn't skewed by scoring the two models on different data. A model is aliased `challenger` only if Recall@200 ≥ threshold AND NDCG@K ≥ the current champion's freshly-measured score (or, if no champion exists yet, Recall@200 ≥ threshold alone). Manual review is required before reassigning the `champion` alias to a `challenger`.
 
 ### Orchestrator
 **Choice: Airflow.** These are scheduled, non-interactive batch jobs — the dominant constraint is reliably orchestrating production workflows, not pipeline aesthetics. Airflow's retry and alerting behavior is the actual production value: every task in a DAG can be configured with retry count, retry delay, and timeout, and that retry-before-alert, alert-before-giving-up pattern is what makes the system maintainable by a small team.
@@ -127,9 +127,9 @@ Excellent for local workflows but not designed as a distributed processing engin
 
 **DAG 2 — Training Pipeline.** Trigger: drift-detection alert or manual trigger. Read serving logs and interaction events from Snowflake → Spark log-and-join assembly (90-day rolling window, recency decay) → validate training dataset → train on EC2 GPU spot instance → offline evaluation on this run's own validation split (Recall@200, NDCG@K) → branch: metrics pass an absolute floor threshold → save model + preprocessing artifacts to S3 → log run to MLflow → trigger the Validation Pipeline via Airflow REST API → notify team; fail → log failure, alert team, halt.
 
-**Validation Pipeline — Champion/Challenger Gate.** Trigger: explicit call from DAG 2. Load the candidate model just trained and the current MLflow Production-stage model (if one exists) → evaluate both against a fixed, held-out test set (distinct from DAG 2's rolling training window, so scores stay comparable across runs regardless of when each model was trained) → branch: no production model exists (cold start) → candidate alone clears the absolute floor threshold → register candidate to Staging, notify team for manual review; production model exists → candidate's Recall@200 and NDCG@K both ≥ production's freshly-measured scores on the same test set → register candidate to Staging, notify team for manual review; candidate does not win → log the comparison, notify team, no promotion, halt.
+**Validation Pipeline — Champion/Challenger Gate.** Trigger: explicit call from DAG 2. Load the candidate model just trained and the current `champion`-aliased model (if one exists) → evaluate both against a fixed, held-out test set (distinct from DAG 2's rolling training window, so scores stay comparable across runs regardless of when each model was trained) → branch: no champion exists (cold start) → candidate alone clears the absolute floor threshold → register candidate, alias it `challenger`, notify team for manual review; champion exists → candidate's Recall@200 and NDCG@K both ≥ champion's freshly-measured scores on the same test set → register candidate, alias it `challenger`, notify team for manual review; candidate does not win → log the comparison, notify team, no promotion, halt.
 
-**DAG 3 — Deployment Pipeline.** Trigger: manual, following Staging → Production promotion (the manual review gate above); also triggered directly by a serving-code merge to main (Layer 1). Load the promoted model from MLflow → deploy to ECS shadow environment → run shadow evaluation (compare candidate sets and scores against production on live traffic) → notify team with shadow metrics via Slack → wait for manual approval → on approval: canary rollout at 5% traffic → monitor canary metrics for a defined window → gradual traffic increase → full promotion → archive previous production model.
+**DAG 3 — Deployment Pipeline.** Trigger: manual, following the `challenger` → `champion` alias promotion (the manual review gate above); also triggered directly by a serving-code merge to main (Layer 1). Load the promoted model from MLflow → deploy to ECS shadow environment → run shadow evaluation (compare candidate sets and scores against production on live traffic) → notify team with shadow metrics via Slack → wait for manual approval → on approval: canary rollout at 5% traffic → monitor canary metrics for a defined window → gradual traffic increase → full promotion → the previous champion stays registered, simply no longer aliased `champion`, available for instant rollback.
 
 ### CI/CD for ML
 The DAGs above are the ML-specific validation layer (Layer 2). GitHub Actions adds a code-change trigger layer (Layer 1) on top of them; ECS + CloudWatch shadow/canary routing is the production-validation layer (Layer 3).
@@ -164,6 +164,34 @@ The key difference from traditional software CI/CD: it asks "did the tests pass?
 ## Components & How They Interact
 
 Three independently deployable, independently auto-scaled ECS services, communicating over the internal AWS VPC (no public traffic between them):
+
+```
+Anchor item_id (PDP view)
+        │
+        ▼
+  API Gateway / Orchestrator
+        │
+        ▼
+  Retrieval Service ──── FAISS/HNSW index (precomputed item embeddings)
+        │                 anchor embedding lookup only -- no live model
+        │                 inference, no user identity involved
+        ▼
+  Top 200 candidates + similarity scores
+        │
+        ▼
+  Ranking Service ──── Redis: User Daily Features (if user_id known)
+        │            ── Redis: Candidate Daily Features (all 200, batch)
+        │            ── cross features computed inline (same_brand,
+        │               price_ratio, price_diff, ...)
+        ▼
+  LambdaMART scores all 200 → truncate to top 20
+        │
+        ▼
+  API Gateway → response to user → log Impression Event (20 shown)
+
+Latency budget: retrieval < 30ms p99; end-to-end (retrieval + ranking +
+API overhead) < 100ms p99.
+```
 
 **API Gateway / Orchestrator.** Receives the raw request from the frontend, calls the retrieval service, passes candidates to the ranking service, returns the final list to the frontend. Thin — no ML model, minimal memory footprint. Also owns fallback routing when retrieval or ranking is unavailable, and is where A/B bucket assignment is read and traffic routed to the correct model version.
 
