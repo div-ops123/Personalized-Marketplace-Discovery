@@ -3,6 +3,8 @@ data_gen/ or pipelines/ (see common/constants.py's own docstring for that
 module's narrower scope).
 """
 
+from pathlib import Path
+
 # Bumped whenever a change to the two training tables' columns or to the
 # preprocessing/vocab logic here would make an old model artifact's
 # preprocessing incompatible with newly-read training data. Logged as an
@@ -45,3 +47,23 @@ RANKING_EARLY_STOPPING_ROUNDS = 50
 # as validation, everything earlier as train.
 SPLIT_VAL_DAYS = 7
 SPLIT_TEST_DAYS = 7
+
+# Validation Pipeline / champion-challenger gate (docs/LLD.md's "Validation
+# Pipeline -- Champion/Challenger Gate", mirrored locally by
+# validation_pipeline.py). Conservative floors set below this project's
+# current best measured scores (val_ndcg_at_20=0.3855, best_val_recall_at_200
+# =0.9906) -- a candidate must clear these even with no champion to beat yet.
+# Both CLI-overridable (--ndcg-floor / --recall-floor).
+RANKING_NDCG_FLOOR = 0.25
+RETRIEVAL_RECALL_FLOOR = 0.80
+
+# Where validation_pipeline.py freezes ranking_training_examples's test
+# split on first run, so every later gate run scores champion and
+# challenger on identical rows regardless of when either was trained.
+FROZEN_TEST_SET_DIR = Path("training") / "frozen_test_sets"
+
+# MLflow Model Registry names -- match each training script's own
+# mlflow.set_experiment(...) string, reused as the registered-model name
+# too so there's only one name to keep in sync.
+RANKING_MODEL_NAME = "ranking_lambdamart"
+RETRIEVAL_MODEL_NAME = "retrieval_encoder"

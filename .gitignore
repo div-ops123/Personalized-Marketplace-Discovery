@@ -228,3 +228,8 @@ serving/index/
 # the Postgres warehouse, not source.
 serving/ranking/
 serving/features/
+
+# Frozen validation-gate test set (training/validation_pipeline.py) --
+# derived from the Postgres warehouse's current data, not source. Deleting
+# it just means the next gate run re-freezes a new one.
+training/frozen_test_sets/
