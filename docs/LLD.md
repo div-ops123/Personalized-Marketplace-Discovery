@@ -212,9 +212,9 @@ During inference: after responding to the user, log the Impression Event; log a 
 1. **System Monitoring** — "Can my service keep serving recommendations?" Monitor P99 latency, QPS, error rate, CPU, memory, GPU utilization. Latency exceeding SLA triggers an alert.
 
 2. **Feature Monitoring** — "Is production data still similar to training data?" Monitor missing values and feature drift.
-   - Categorical features: Jensen-Shannon Divergence. *(Rationale not yet fully specified in the original notes — left open rather than invented; fill in before implementation.)*
+   <!-- - Categorical features: Jensen-Shannon Divergence. *(Rationale not yet fully specified in the original notes — left open rather than invented; fill in before implementation.)*
    - Numerical features: KS test, since it requires no manual binning.
-   - Embedding monitoring (image/text/item-encoder outputs): open question, not yet defined.
+   - Embedding monitoring (image/text/item-encoder outputs): open question, not yet defined. -->
 
 3. **Prediction Monitoring** — "Has the model started behaving strangely?" Monitor the prediction score distribution over time (not compared against ground truth — ground truth isn't available yet at prediction time).
 
