@@ -1,18 +1,11 @@
+
 # Personalized Marketplace Discovery
 
 A two-stage retrieval-then-rank recommender that powers a "Similar Items" widget on a marketplace Product Detail Page (PDP) — built, trained, and served end-to-end locally, with a production-scale system design documented for the pieces not worth running on a laptop.
 
 ## Demo
 
-<!-- TODO: replace with the actual demo video/GIF once recorded.
-     GitHub renders an uploaded video/GIF directly if you drag the file into
-     the README editor on github.com (or a PR/issue comment) -- it generates
-     a `https://github.com/<user>/<repo>/assets/...` URL you paste here. A
-     short screen-recording walking through a PDP -> Similar Items request,
-     with the API Gateway/Retrieval/Ranking logs visible, demonstrates more
-     than a static screenshot would. -->
-
-*(demo video coming soon)*
+https://github.com/user-attachments/assets/76415683-8938-4185-859b-2764bc0ef339
 
 ---
 
