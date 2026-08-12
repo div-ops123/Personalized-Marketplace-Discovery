@@ -10,7 +10,7 @@ shape retrieval_model.ItemEncoder.forward consumes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
 import pandas as pd
@@ -59,6 +59,9 @@ class ItemFeatures:
 
     def __len__(self) -> int:
         return self.item_id.shape[0]
+
+    def to(self, device: torch.device) -> "ItemFeatures":
+        return ItemFeatures(**{f.name: getattr(self, f.name).to(device) for f in fields(self)})
 
 
 def infer_embedding_dims(df: pd.DataFrame) -> tuple[int, int]:
@@ -172,7 +175,8 @@ def embed_catalog(
     renamed["price_tier"] = [price_tier(p, c) for p, c in zip(renamed["price"], renamed["category"])]
     renamed = renamed.rename(columns=CATALOG_RENAME)
     with torch.no_grad():
-        features = encode_item_side(renamed, "gallery", vocabs, image_dim)
+        device = next(model.parameters()).device
+        features = encode_item_side(renamed, "gallery", vocabs, image_dim).to(device)
         return model(features)
 
 

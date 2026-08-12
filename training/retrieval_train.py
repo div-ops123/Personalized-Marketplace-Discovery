@@ -96,6 +96,7 @@ def main(args: argparse.Namespace) -> None:
     start = time.perf_counter()
     rng = np.random.default_rng(args.seed)
     torch.manual_seed(args.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     engine = get_engine()
     retrieval_df = read_retrieval_training_examples(engine)
@@ -128,6 +129,8 @@ def main(args: argparse.Namespace) -> None:
         image_dim=image_dim,
         embedding_dim=args.embedding_dim,
     )
+    model.to(device)
+    logger.info("Training on device=%s", next(model.parameters()).device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     num_positive = int((train_df["label"] == 1).sum())
@@ -139,6 +142,7 @@ def main(args: argparse.Namespace) -> None:
         mlflow.log_param("text_dim", text_dim)
         mlflow.log_param("image_dim", image_dim)
         mlflow.log_param("item_id_vocab_size", vocab_sizes["item_id"])
+        mlflow.log_param("device", str(device))
         log_reproducibility_metadata(
             engine, "retrieval_training_examples", extra_tables=["ranking_training_examples"]
         )
@@ -152,9 +156,11 @@ def main(args: argparse.Namespace) -> None:
             epoch_losses = []
             for _ in range(steps_per_epoch):
                 batch = sample_training_batch(train_df, args.batch_size, args.hard_negatives_per_anchor, rng)
-                anchor_features = encode_item_side(batch.anchor_rows, "anchor", vocabs, image_dim)
-                pos_features = encode_item_side(batch.anchor_rows, "candidate", vocabs, image_dim)
+                anchor_features = encode_item_side(batch.anchor_rows, "anchor", vocabs, image_dim).to(device)
+                pos_features = encode_item_side(batch.anchor_rows, "candidate", vocabs, image_dim).to(device)
                 hard_neg_features, hard_neg_valid = encode_hard_negatives(batch, vocabs, image_dim)
+                hard_neg_features = hard_neg_features.to(device)
+                hard_neg_valid = hard_neg_valid.to(device)
 
                 anchor_emb = model(anchor_features)
                 pos_emb = model(pos_features)

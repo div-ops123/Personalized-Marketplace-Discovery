@@ -1424,7 +1424,6 @@ serving = [
 training = [
     { name = "lightgbm" },
     { name = "mlflow-skinny" },
-    { name = "torch" },
 ]
 
 [package.metadata]
@@ -1446,7 +1445,6 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'datagen'", specifier = ">=5.6.1" },
     { name = "snowflake-sqlalchemy", specifier = ">=1.11.0" },
     { name = "sqlalchemy", specifier = ">=2.0.51" },
-    { name = "torch", marker = "extra == 'training'", specifier = ">=2.4" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'serving'", specifier = ">=0.30" },
 ]
 provides-extras = ["datagen", "training", "serving", "dev"]

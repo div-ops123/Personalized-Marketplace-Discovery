@@ -149,7 +149,7 @@ Everything below "Built" runs locally, end-to-end, and has been exercised by han
 - Synthetic data generation (item catalog with deliberate cold-start gaps, user population with hidden latent preferences, 90-day event simulation with position-biased clicks and both attributed and organic purchases)
 - Airflow DAG computing daily User/Candidate features from raw events into Postgres, with data-quality validation (null rates, coverage, row counts)
 - Retrieval + ranking dataset builders (point-in-time joins, no label leakage)
-- Training: Siamese item encoder + LambdaMART ranker, tracked in MLflow
+- Training: Siamese item encoder + LambdaMART ranker, tracked in MLflow — retrieval training auto-selects CUDA when available (falls back to CPU otherwise), device logged as an MLflow run param; verified on an NVIDIA GPU locally with Recall@200 matching the CPU-trained baseline
 - FAISS index build from trained item embeddings
 - **Local validation pipeline** — a champion/challenger promotion gate: evaluates a newly-trained candidate against the current champion on a frozen test set, gates promotion on clearing both an absolute floor and the champion's score, promotes via MLflow aliases (`challenger` → `champion` as an explicit, separate step, not automatic)
 - Local serving stack — API Gateway + Retrieval Service + Ranking Service (FastAPI), each mounting a static export, no live DB/MLflow/Redis needed to run it
@@ -224,11 +224,21 @@ The commands below use `uv run python ...` — if you went the pip route, drop t
 **Full pipeline (data → training → validation gate):**
 
 ```bash
-docker compose -f infra/docker-compose.pipeline.yml up -d   # Postgres + Airflow + Spark
-docker compose -f infra/docker-compose.mlflow.yml up -d     # MLflow tracking server
+docker compose --env-file .env -f infra/docker-compose.pipeline.yml up -d   # Postgres + Airflow + Spark
+docker compose --env-file .env -f infra/docker-compose.mlflow.yml up -d     # MLflow tracking server
 
-# generate the synthetic catalog, users, and events -- see Synthetic Data (above)
-# then run the daily feature pipeline DAG (see docs/build-phases.md for the full sequence)
+# 1. generate the synthetic catalog, users, and events -- see Synthetic Data (above)
+
+# 2. backfill the daily feature pipeline DAG (User/Candidate Daily Features, one day per task)
+#    note: this backfill never completed cleanly on local hardware for me either --
+#    see What Didn't Work. If it stalls, the dataset builders below only need
+#    however many days' worth of snapshots actually landed in Postgres.
+docker compose -f infra/docker-compose.pipeline.yml exec airflow-scheduler \
+    airflow dags backfill daily_feature_pipeline -s 2025-01-01 -e 2025-04-01
+
+# 3. build the retrieval + ranking training datasets from the backfilled features
+#    (--days caps history to fit a local Spark driver's heap -- see What Didn't Work)
+uv run python pipelines/spark_jobs/run_dataset_builders.py --builder both --days 5
 
 uv run python training/retrieval_train.py
 uv run python training/ranking_train.py
