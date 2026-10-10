@@ -33,19 +33,12 @@ CATALOG_RENAME = {
     "price_tier": "gallery_price_tier",
     "tags": "gallery_tags",
     "text_embedding": "gallery_text_embedding",
-    "image_embedding": "gallery_image_embedding",
 }
 
 
 @dataclass
 class ItemFeatures:
-    """One encoder call's worth of item features, batched.
-
-    image_embedding is zero-filled wherever image_missing is True --
-    ItemEncoder substitutes its own learned "missing image" vector in that
-    case (see retrieval_model.py), never a bare zero vector, since zero
-    could coincide with a legitimate embedding value.
-    """
+    """One encoder call's worth of item features, batched."""
 
     item_id: torch.Tensor
     category: torch.Tensor
@@ -54,8 +47,6 @@ class ItemFeatures:
     price_tier: torch.Tensor
     tags: torch.Tensor
     text_embedding: torch.Tensor
-    image_embedding: torch.Tensor
-    image_missing: torch.Tensor
 
     def __len__(self) -> int:
         return self.item_id.shape[0]
@@ -64,38 +55,23 @@ class ItemFeatures:
         return ItemFeatures(**{f.name: getattr(self, f.name).to(device) for f in fields(self)})
 
 
-def infer_embedding_dims(df: pd.DataFrame) -> tuple[int, int]:
-    """Infers text/image embedding dimensions from the data itself.
+def infer_text_embedding_dim(df: pd.DataFrame) -> int:
+    """Infers the text embedding dimension from the data itself.
 
     Never hardcoded -- decouples this code from a specific upstream
     text-embedding model choice (currently all-MiniLM-L6-v2, 384-dim, per
-    data_gen/config.py). image_embedding is always None in this repo's
-    synthetic data (data_gen/item_catalog.py hardcodes it), so there is no
-    real embedding to measure -- fall back to the text dimension so
-    concatenation is well-defined regardless.
+    data_gen/config.py).
 
     Args:
-        df: A DataFrame with at least an "anchor_text_embedding" column,
-            and optionally "anchor_image_embedding"/"candidate_image_embedding".
+        df: A DataFrame with at least an "anchor_text_embedding" column.
 
     Returns:
-        tuple[int, int]: (text_embedding_dim, image_embedding_dim).
+        int: The text embedding dimension.
     """
-    text_dim = len(df["anchor_text_embedding"].iloc[0])
-    image_dim = text_dim
-    for column in ("anchor_image_embedding", "candidate_image_embedding"):
-        if column not in df.columns:
-            continue
-        non_null = df[column].dropna()
-        if len(non_null) > 0:
-            image_dim = len(non_null.iloc[0])
-            break
-    return text_dim, image_dim
+    return len(df["anchor_text_embedding"].iloc[0])
 
 
-def encode_item_side(
-    df: pd.DataFrame, prefix: str, vocabs: dict[str, Vocabulary], image_dim: int
-) -> ItemFeatures:
+def encode_item_side(df: pd.DataFrame, prefix: str, vocabs: dict[str, Vocabulary]) -> ItemFeatures:
     """Encodes one side (anchor or candidate) of a retrieval examples DataFrame.
 
     Args:
@@ -107,12 +83,10 @@ def encode_item_side(
             renaming, e.g. "gallery").
         vocabs: Must contain "item_id", "category", "subcategory", "brand",
             "price_tier", "tags" Vocabulary instances.
-        image_dim: Dimension to zero-fill image_embedding to when missing.
 
     Returns:
         ItemFeatures: Batched tensors for this side.
     """
-    n = len(df)
     item_id = torch.tensor(
         [vocabs["item_id"].encode(v) for v in df[f"{prefix}_item_id"]], dtype=torch.long
     )
@@ -131,13 +105,6 @@ def encode_item_side(
         np.stack(df[f"{prefix}_text_embedding"].to_numpy()).astype(np.float32), dtype=torch.float32
     )
 
-    image_raw = df[f"{prefix}_image_embedding"].tolist()
-    image_missing = torch.tensor([v is None for v in image_raw], dtype=torch.bool)
-    image_embedding = torch.zeros((n, image_dim), dtype=torch.float32)
-    for row_index, value in enumerate(image_raw):
-        if value is not None:
-            image_embedding[row_index] = torch.tensor(value, dtype=torch.float32)
-
     return ItemFeatures(
         item_id=item_id,
         category=category,
@@ -146,14 +113,10 @@ def encode_item_side(
         price_tier=price_tier,
         tags=tags,
         text_embedding=text_embedding,
-        image_embedding=image_embedding,
-        image_missing=image_missing,
     )
 
 
-def embed_catalog(
-    model: nn.Module, catalog_df: pd.DataFrame, vocabs: dict[str, Vocabulary], image_dim: int
-) -> torch.Tensor:
+def embed_catalog(model: nn.Module, catalog_df: pd.DataFrame, vocabs: dict[str, Vocabulary]) -> torch.Tensor:
     """Embeds a raw item_catalog_df (or any subset of it) through the encoder.
 
     catalog_df has no price_tier column (it's computed downstream from
@@ -165,7 +128,6 @@ def embed_catalog(
         catalog_df: item_catalog rows (any subset), unprefixed columns, as
             returned by training/db_io.py's read_full_item_catalog.
         vocabs: Vocabularies for encode_item_side.
-        image_dim: Image embedding dimension.
 
     Returns:
         torch.Tensor: (len(catalog_df), embedding_dim), row-aligned with
@@ -176,7 +138,7 @@ def embed_catalog(
     renamed = renamed.rename(columns=CATALOG_RENAME)
     with torch.no_grad():
         device = next(model.parameters()).device
-        features = encode_item_side(renamed, "gallery", vocabs, image_dim).to(device)
+        features = encode_item_side(renamed, "gallery", vocabs).to(device)
         return model(features)
 
 
@@ -250,7 +212,7 @@ def sample_training_batch(
 
 
 def encode_hard_negatives(
-    batch: RetrievalBatch, vocabs: dict[str, Vocabulary], image_dim: int
+    batch: RetrievalBatch, vocabs: dict[str, Vocabulary]
 ) -> tuple[ItemFeatures, torch.Tensor]:
     """Pads each anchor's hard negatives to a fixed (B, H) grid for encoding.
 
@@ -263,7 +225,6 @@ def encode_hard_negatives(
     Args:
         batch: A RetrievalBatch from sample_training_batch.
         vocabs: Vocabularies for encode_item_side.
-        image_dim: Image embedding dimension for encode_item_side.
 
     Returns:
         tuple[ItemFeatures, torch.Tensor]: Flattened (B*H,) ItemFeatures in
@@ -284,5 +245,5 @@ def encode_hard_negatives(
             else:
                 padded_rows.append(batch.anchor_rows.iloc[[anchor_index]])
     padded_df = pd.concat(padded_rows, ignore_index=True)
-    features = encode_item_side(padded_df, "candidate", vocabs, image_dim)
+    features = encode_item_side(padded_df, "candidate", vocabs)
     return features, valid_mask

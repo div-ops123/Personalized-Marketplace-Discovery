@@ -186,10 +186,8 @@ def evaluate_retrieval(model, run_id: str, test_df: pd.DataFrame, engine) -> flo
         float: Recall@K, or NaN if no anchor has a purchased positive.
     """
     vocabs = load_retrieval_vocabs(run_id)
-    run = mlflow.get_run(run_id)
-    image_dim = int(run.data.params["image_dim"])
     catalog_df = read_full_item_catalog(engine)
-    return recall_at_k(model, test_df, catalog_df, vocabs, image_dim, k=RETRIEVAL_RECALL_K)
+    return recall_at_k(model, test_df, catalog_df, vocabs, k=RETRIEVAL_RECALL_K)
 
 
 def evaluate(model_type: str, run_id: str, test_df: pd.DataFrame, engine) -> float:

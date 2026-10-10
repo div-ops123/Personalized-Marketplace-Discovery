@@ -23,14 +23,12 @@ _OUTPUT_COLUMNS = [
     "anchor_brand",
     "anchor_price_tier",
     "anchor_tags",
-    "anchor_image_embedding",
     "anchor_text_embedding",
     "candidate_category",
     "candidate_subcategory",
     "candidate_brand",
     "candidate_price_tier",
     "candidate_tags",
-    "candidate_image_embedding",
     "candidate_text_embedding",
     "label",
 ]
@@ -40,10 +38,8 @@ _OUTPUT_COLUMNS = [
 # single-shot toPandas() below.
 ARRAY_COLUMNS = [
     "anchor_tags",
-    "anchor_image_embedding",
     "anchor_text_embedding",
     "candidate_tags",
-    "candidate_image_embedding",
     "candidate_text_embedding",
 ]
 
@@ -54,7 +50,7 @@ def _item_features(spark: SparkSession, items_df: pd.DataFrame, prefix: str) -> 
     Args:
         spark: An active SparkSession.
         items_df: item_id, category, subcategory, brand, price, tags,
-            image_embedding, text_embedding columns (see
+            text_embedding columns (see
             dataset_db_io.read_full_item_catalog).
         prefix: "anchor" or "candidate" -- every non-join column is
             renamed "{prefix}_{column}".
@@ -62,14 +58,14 @@ def _item_features(spark: SparkSession, items_df: pd.DataFrame, prefix: str) -> 
     Returns:
         SparkDataFrame: item_id (unprefixed, used as the join key) plus
             prefixed category/subcategory/brand/price_tier/tags/
-            image_embedding/text_embedding columns.
+            text_embedding columns.
     """
     with_tier = items_df.copy()
     with_tier["price_tier"] = [price_tier(p, c) for p, c in zip(with_tier["price"], with_tier["category"])]
     with_tier = with_tier.drop(columns=["price"])
 
     df = spark.createDataFrame(with_tier)
-    for column in ["category", "subcategory", "brand", "price_tier", "tags", "image_embedding", "text_embedding"]:
+    for column in ["category", "subcategory", "brand", "price_tier", "tags", "text_embedding"]:
         df = df.withColumnRenamed(column, f"{prefix}_{column}")
     return df
 

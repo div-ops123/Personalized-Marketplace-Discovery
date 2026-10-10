@@ -107,7 +107,7 @@ Both stages read from the same raw logs (Impression, Click, Purchase) but branch
 
 **Result — materialized in the warehouse:**
 
-| anchor_features (category, subcategory, brand, price_tier, tags, image_embedding, text_embedding) | candidate_features (same set) | label |
+| anchor_features (category, subcategory, brand, price_tier, tags, text_embedding) | candidate_features (same set) | label |
 |---|---|---|
 
 This table covers **exposure-derived pairs only.** In-batch negatives (other anchors' positive candidates reused as negatives within a training minibatch) are **not** part of this warehouse table — they're constructed dynamically by the training loop at batch-assembly time, since they depend on whatever anchors happen to co-occur in a given random batch.
@@ -137,7 +137,7 @@ This table covers **exposure-derived pairs only.** In-batch negatives (other anc
 
 **Stored:** `retrieval_similarity_score`. Unlike the cross features above, this isn't derivable from static item attributes — it's the output of the Stage 1 item encoder at serving time, so it's captured directly on the Impression Event and carried through rather than recomputed.
 
-**Versioned separately (model artifacts, not data pipeline concerns):** the image/text embedding encoders and the item encoder network itself. These represent fitted parameters — if an encoder version changes, every downstream item embedding silently changes meaning, so these are versioned and stored as model artifacts at training/deployment time, not as part of the data flow above.
+**Versioned separately (model artifacts, not data pipeline concerns):** the text embedding encoder and the item encoder network itself. These represent fitted parameters — if an encoder version changes, every downstream item embedding silently changes meaning, so these are versioned and stored as model artifacts at training/deployment time, not as part of the data flow above.
 
 ---
 
@@ -147,7 +147,7 @@ Three source tables feed the dataset builders:
 
 | Table | Shape | Schema |
 |---|---|---|
-| Item Catalog | Current-state (operational) | `item_id, category, subcategory, brand, price, tags, image_embedding, text_embedding` — synced whenever catalog data changes |
+| Item Catalog | Current-state (operational) | `item_id, category, subcategory, brand, price, tags, text_embedding` — synced whenever catalog data changes |
 | User Daily Features | Historized (daily snapshots) | `snapshot_date, user_id, preferred_brands, avg_purchase_price, historical_category_affinity` |
 | Candidate Daily Features | Historized (daily snapshots) | `snapshot_date, candidate_id, recommendation_ctr, recommendation_cvr, recommendation_impressions` |
 

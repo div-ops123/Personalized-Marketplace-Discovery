@@ -15,7 +15,6 @@ def test_build_item_catalog_empty():
         "price",
         "tags",
         "description",
-        "image_embedding",
     }
 
 
@@ -23,12 +22,6 @@ def test_build_item_catalog_row_count():
     """Generates exactly n_items rows."""
     df = build_item_catalog(50, seed=1)
     assert len(df) == 50
-
-
-def test_build_item_catalog_image_embedding_always_none():
-    """image_embedding is null for every item — no product photos exist."""
-    df = build_item_catalog(50, seed=1)
-    assert df["image_embedding"].isna().all()
 
 
 def test_build_item_catalog_deterministic():

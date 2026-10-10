@@ -21,7 +21,6 @@ item_catalog_table = Table(
     Column("price", Float, nullable=False),
     Column("tags", ARRAY(String), nullable=False),
     Column("description", String, nullable=False),
-    Column("image_embedding", ARRAY(Float), nullable=True),
     Column("text_embedding", ARRAY(Float), nullable=False),
 )
 

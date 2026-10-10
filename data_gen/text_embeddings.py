@@ -2,7 +2,7 @@
 
 These are genuine embeddings of real (synthetic) text, not fabricated
 vectors — required so the cold-start content-similarity heuristic in
-docs/data-schema.md (image/text embedding distance) has real semantic
+docs/data-schema.md (text embedding distance) has real semantic
 meaning to work with.
 """
 

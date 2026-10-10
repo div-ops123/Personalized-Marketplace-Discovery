@@ -97,10 +97,9 @@ def read_full_item_catalog(engine: Engine) -> pd.DataFrame:
 
     Returns:
         pd.DataFrame: item_id, category, subcategory, brand, price, tags,
-            image_embedding, text_embedding columns.
+            text_embedding columns.
     """
     return pd.read_sql(
-        "SELECT item_id, category, subcategory, brand, price, tags, "
-        "image_embedding, text_embedding FROM item_catalog",
+        "SELECT item_id, category, subcategory, brand, price, tags, text_embedding FROM item_catalog",
         engine,
     )

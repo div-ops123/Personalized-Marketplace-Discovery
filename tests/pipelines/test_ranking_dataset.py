@@ -13,7 +13,6 @@ _ITEMS = pd.DataFrame(
         "brand": ["Nike", "Adidas"],
         "price": [40.0, 200.0],
         "tags": [["casual"], ["waterproof"]],
-        "image_embedding": [[0.1, 0.2], [0.3, 0.4]],
         "text_embedding": [[0.5, 0.6], [0.7, 0.8]],
     }
 )

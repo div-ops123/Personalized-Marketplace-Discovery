@@ -1,8 +1,7 @@
 """FastAPI API Gateway -- the single entrypoint a client calls: 
 fans out to the Retrieval Service, then the Ranking Service, 
-then enriches the top-k with catalog metadata for display 
-(category/brand/price -- no images, per the catalog generation
-step in docs/build-phases.md leaving image null).
+then enriches the top-k with catalog metadata for display
+(category/brand/price).
 
 Error handling is a plain 503 passthrough if retrieval/ranking is
 unreachable -- not the fuller fallback-cache/circuit-breaker behavior

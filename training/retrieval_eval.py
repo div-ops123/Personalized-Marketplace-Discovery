@@ -29,7 +29,6 @@ def recall_at_k(
     eval_positives_df: pd.DataFrame,
     item_catalog_df: pd.DataFrame,
     vocabs: dict[str, Vocabulary],
-    image_dim: int,
     k: int = RETRIEVAL_RECALL_K,
 ) -> float:
     """Computes Recall@K against purchase-labeled ground truth.
@@ -43,7 +42,6 @@ def recall_at_k(
         item_catalog_df: Full item catalog (training/db_io.py's
             read_full_item_catalog) -- the retrieval gallery.
         vocabs: Vocabularies used to encode both anchors and the gallery.
-        image_dim: Image embedding dimension.
         k: Cutoff for Recall@K.
 
     Returns:
@@ -56,14 +54,14 @@ def recall_at_k(
         return float("nan")
     purchased_by_anchor = positives.groupby("anchor_item_id")["candidate_item_id"].apply(set).to_dict()
 
-    gallery_embeddings = embed_catalog(model, item_catalog_df, vocabs, image_dim)
+    gallery_embeddings = embed_catalog(model, item_catalog_df, vocabs)
     gallery_item_ids = item_catalog_df["item_id"].tolist()
 
     anchor_ids = list(purchased_by_anchor.keys())
     anchor_catalog = item_catalog_df[item_catalog_df["item_id"].isin(anchor_ids)]
     if anchor_catalog.empty:
         return float("nan")
-    anchor_embeddings = embed_catalog(model, anchor_catalog, vocabs, image_dim)
+    anchor_embeddings = embed_catalog(model, anchor_catalog, vocabs)
     anchor_item_ids = anchor_catalog["item_id"].tolist()
 
     similarities = anchor_embeddings @ gallery_embeddings.T

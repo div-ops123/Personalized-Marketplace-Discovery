@@ -178,15 +178,6 @@ def main(args: argparse.Namespace) -> None:
     model.eval()
     vocabs = load_vocabs(run_id)
 
-    run = mlflow.get_run(run_id)
-    try:
-        image_dim = int(run.data.params["image_dim"])
-    except KeyError as exc:
-        raise ValueError(
-            f"Run {run_id} has no logged 'image_dim' param -- retrain with a current "
-            "training/retrieval_train.py before building an index."
-        ) from exc
-
     engine = get_engine()
     catalog_df = read_full_item_catalog(engine)
     logger.info("Loaded item catalog: %d items", len(catalog_df))
@@ -194,7 +185,7 @@ def main(args: argparse.Namespace) -> None:
     # No batching over the catalog -- fine at this repo's actual catalog
     # size (a few thousand items); docs/LLD.md's 2M-item production scale
     # is out of scope for this local, one-shot build step.
-    embeddings = embed_catalog(model, catalog_df, vocabs, image_dim).detach().cpu().numpy()
+    embeddings = embed_catalog(model, catalog_df, vocabs).detach().cpu().numpy()
     item_ids = catalog_df["item_id"].tolist()  # row-aligned with embeddings; embed_catalog never reorders/drops rows
 
     index = build_hnsw_index(embeddings, args.hnsw_m, args.hnsw_ef_construction, args.hnsw_ef_search)

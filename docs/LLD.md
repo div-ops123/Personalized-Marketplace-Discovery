@@ -18,7 +18,7 @@ Raw events land in Snowflake continuously via Kinesis.
 
 ## Cold Start Handling
 
-**New items:** surfaced by retrieval regardless of interaction history, because the item encoder is content-based (image/text embeddings, category, brand) — a new item gets an embedding and enters the ANN index as soon as it's indexed, with zero click history required. Ranking also has signal on new items through their catalog/content features even before behavioral aggregates (historical CTR/CVR) accumulate; those default to a global prior via the smoothing/backoff already defined in data-schema.md.
+**New items:** surfaced by retrieval regardless of interaction history, because the item encoder is content-based (text embeddings, category, brand) — a new item gets an embedding and enters the ANN index as soon as it's indexed, with zero click history required. Ranking also has signal on new items through their catalog/content features even before behavioral aggregates (historical CTR/CVR) accumulate; those default to a global prior via the smoothing/backoff already defined in data-schema.md.
 
 **New / anonymous users:** retrieval is entirely item-item and unaffected by user identity. Ranking degrades gracefully — user-level features (preferred brands, avg purchase price, category affinity) are simply unavailable, so ranking falls back to anchor/candidate/cross features only. The widget still functions; it's just not personalized for that request.
 
@@ -214,7 +214,7 @@ During inference: after responding to the user, log the Impression Event; log a 
 2. **Feature Monitoring** — "Is production data still similar to training data?" Monitor missing values and feature drift.
    <!-- - Categorical features: Jensen-Shannon Divergence. *(Rationale not yet fully specified in the original notes — left open rather than invented; fill in before implementation.)*
    - Numerical features: KS test, since it requires no manual binning.
-   - Embedding monitoring (image/text/item-encoder outputs): open question, not yet defined. -->
+   - Embedding monitoring (text/item-encoder outputs): open question, not yet defined. -->
 
 3. **Prediction Monitoring** — "Has the model started behaving strangely?" Monitor the prediction score distribution over time (not compared against ground truth — ground truth isn't available yet at prediction time).
 

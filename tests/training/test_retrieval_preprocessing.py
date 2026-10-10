@@ -91,7 +91,6 @@ def _synthetic_catalog(n_items: int = 6) -> pd.DataFrame:
                 "brand": "Nike" if category == "Footwear" else "Penguin",
                 "price": 50.0,
                 "tags": ["casual"],
-                "image_embedding": None,
                 "text_embedding": [0.1] * 8,
             }
         )
@@ -109,10 +108,10 @@ def test_embed_catalog_shape_and_row_order():
         "brand": len(vocabs["brand"]),
         "price_tier": len(vocabs["price_tier"]),
     }
-    model = ItemEncoder(vocab_sizes, num_tags=len(vocabs["tags"]), text_dim=8, image_dim=8, embedding_dim=16)
+    model = ItemEncoder(vocab_sizes, num_tags=len(vocabs["tags"]), text_dim=8, embedding_dim=16)
     model.eval()
 
-    embeddings = embed_catalog(model, catalog_df, vocabs, image_dim=8)
+    embeddings = embed_catalog(model, catalog_df, vocabs)
 
     assert embeddings.shape == (6, 16)
     # embed_catalog must not reorder or drop rows -- callers (recall_at_k,

@@ -12,7 +12,6 @@ _ITEMS = pd.DataFrame(
         "brand": ["Nike", "Adidas", "Nike"],
         "price": [40.0, 200.0, 40.0],
         "tags": [["casual"], ["waterproof"], ["athletic"]],
-        "image_embedding": [[0.1, 0.2], [0.3, 0.4], None],
         "text_embedding": [[0.5, 0.6], [0.7, 0.8], [0.9, 1.0]],
     }
 )
@@ -52,10 +51,7 @@ def test_build_retrieval_dataset_basic(spark):
     assert result.loc["item_2", "candidate_price_tier"] == "premium"
     assert result.loc["item_2", "candidate_tags"] == ["waterproof"]
     assert isinstance(result.loc["item_2", "candidate_tags"], list)
-    assert result.loc["item_2", "candidate_image_embedding"] == [0.3, 0.4]
-
-    # item_3's image_embedding is None (cold-start-style null in the catalog).
-    assert result.loc["item_3", "candidate_image_embedding"] is None
+    assert result.loc["item_2", "candidate_text_embedding"] == [0.7, 0.8]
 
 
 def test_build_retrieval_dataset_no_clicks_all_negative(spark):

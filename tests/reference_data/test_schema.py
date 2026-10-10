@@ -14,7 +14,6 @@ def test_item_catalog_columns_match_documented_schema():
         "price",
         "tags",
         "description",
-        "image_embedding",
         "text_embedding",
     }
     assert set(item_catalog_table.columns.keys()) == expected

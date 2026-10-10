@@ -25,7 +25,7 @@ def build_item(item_id: str, rng: np.random.Generator, fake: Faker) -> dict:
         fake: A Faker instance used for the free-text description flavor.
 
     Returns:
-        dict: One item_catalog row (image_embedding always None).
+        dict: One item_catalog row (text_embedding is added separately).
     """
     category = sample_category(rng)
     subcategory = sample_subcategory(rng, category)
@@ -41,7 +41,6 @@ def build_item(item_id: str, rng: np.random.Generator, fake: Faker) -> dict:
         "price": price,
         "tags": tags,
         "description": description,
-        "image_embedding": None,
     }
 
 
@@ -68,7 +67,6 @@ def build_item_catalog(n_items: int, seed: int) -> pd.DataFrame:
                 "price",
                 "tags",
                 "description",
-                "image_embedding",
             ]
         )
 

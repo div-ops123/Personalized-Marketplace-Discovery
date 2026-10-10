@@ -27,7 +27,6 @@ class ItemEncoder(nn.Module):
         vocab_sizes: dict[str, int],
         num_tags: int,
         text_dim: int,
-        image_dim: int,
         embedding_dim: int = RETRIEVAL_EMBEDDING_DIM,
     ):
         """Builds the encoder.
@@ -36,8 +35,7 @@ class ItemEncoder(nn.Module):
             vocab_sizes: len() of each Vocabulary, keyed "item_id",
                 "category", "subcategory", "brand", "price_tier".
             num_tags: len(vocabs["tags"]) -- the multi-hot tags width.
-            text_dim: Text embedding dimension (see infer_embedding_dims).
-            image_dim: Image embedding dimension (see infer_embedding_dims).
+            text_dim: Text embedding dimension (see infer_text_embedding_dim).
             embedding_dim: Output embedding dimension.
         """
         super().__init__()
@@ -47,17 +45,9 @@ class ItemEncoder(nn.Module):
         self.brand_embedding = nn.Embedding(vocab_sizes["brand"], _BRAND_DIM)
         self.price_tier_embedding = nn.Embedding(vocab_sizes["price_tier"], _PRICE_TIER_DIM)
 
-        # A learned stand-in for a missing image embedding -- not zeros,
-        # since zero could coincide with a legitimate embedding value.
-        # image_embedding is always None in this repo's synthetic data
-        # (data_gen/item_catalog.py), so this path is exercised on every row
-        # today; it's also what keeps the architecture correct once real
-        # image embeddings exist.
-        self.missing_image_vector = nn.Parameter(torch.randn(image_dim) * 0.01)
-
         input_dim = (
             _ITEM_ID_DIM + _CATEGORY_DIM + _SUBCATEGORY_DIM + _BRAND_DIM + _PRICE_TIER_DIM
-            + num_tags + text_dim + image_dim
+            + num_tags + text_dim
         )
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, _HIDDEN_DIM),
@@ -75,10 +65,6 @@ class ItemEncoder(nn.Module):
         Returns:
             torch.Tensor: (batch, embedding_dim), L2-normalized.
         """
-        missing = features.image_missing.unsqueeze(-1)
-        missing_vector = self.missing_image_vector.unsqueeze(0).expand(len(features), -1)
-        image_embedding = torch.where(missing, missing_vector, features.image_embedding)
-
         x = torch.cat(
             [
                 self.item_id_embedding(features.item_id),
@@ -88,7 +74,6 @@ class ItemEncoder(nn.Module):
                 self.price_tier_embedding(features.price_tier),
                 features.tags,
                 features.text_embedding,
-                image_embedding,
             ],
             dim=-1,
         )

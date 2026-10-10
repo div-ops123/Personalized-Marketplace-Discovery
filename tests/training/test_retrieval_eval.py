@@ -21,7 +21,6 @@ def _synthetic_catalog(n_items: int = 6) -> pd.DataFrame:
                 "brand": "Nike" if category == "Footwear" else "Penguin",
                 "price": 50.0,
                 "tags": ["casual"],
-                "image_embedding": None,
                 "text_embedding": [0.1] * 8,
             }
         )
@@ -38,9 +37,7 @@ def _model_and_vocabs(catalog_df: pd.DataFrame, embedding_dim: int = 16):
         "brand": len(vocabs["brand"]),
         "price_tier": len(vocabs["price_tier"]),
     }
-    model = ItemEncoder(
-        vocab_sizes, num_tags=len(vocabs["tags"]), text_dim=8, image_dim=8, embedding_dim=embedding_dim
-    )
+    model = ItemEncoder(vocab_sizes, num_tags=len(vocabs["tags"]), text_dim=8, embedding_dim=embedding_dim)
     model.eval()
     return model, vocabs
 
@@ -61,7 +58,7 @@ def test_recall_at_k_full_gallery_cutoff_is_always_one():
         }
     )
 
-    recall = recall_at_k(model, eval_positives_df, catalog_df, vocabs, image_dim=8, k=len(catalog_df))
+    recall = recall_at_k(model, eval_positives_df, catalog_df, vocabs, k=len(catalog_df))
     assert recall == 1.0
 
 
@@ -75,5 +72,5 @@ def test_recall_at_k_no_positive_labels_is_nan():
             "label": [0],
         }
     )
-    recall = recall_at_k(model, eval_positives_df, catalog_df, vocabs, image_dim=8, k=5)
+    recall = recall_at_k(model, eval_positives_df, catalog_df, vocabs, k=5)
     assert np.isnan(recall)

@@ -57,7 +57,7 @@ from training.retrieval_model import ItemEncoder, contrastive_loss
 from training.retrieval_preprocessing import (
     encode_hard_negatives,
     encode_item_side,
-    infer_embedding_dims,
+    infer_text_embedding_dim,
     sample_training_batch,
 )
 from training.splits import temporal_split
@@ -113,7 +113,7 @@ def main(args: argparse.Namespace) -> None:
     vocabs["item_id"] = build_item_id_vocab(
         pd.concat([train_df["anchor_item_id"], train_df["candidate_item_id"]])
     )
-    text_dim, image_dim = infer_embedding_dims(train_df)
+    text_dim = infer_text_embedding_dim(train_df)
 
     vocab_sizes = {
         "item_id": len(vocabs["item_id"]),
@@ -126,7 +126,6 @@ def main(args: argparse.Namespace) -> None:
         vocab_sizes=vocab_sizes,
         num_tags=len(vocabs["tags"]),
         text_dim=text_dim,
-        image_dim=image_dim,
         embedding_dim=args.embedding_dim,
     )
     model.to(device)
@@ -140,7 +139,6 @@ def main(args: argparse.Namespace) -> None:
     with mlflow.start_run(run_name="retrieval_encoder"):
         mlflow.log_params(vars(args))
         mlflow.log_param("text_dim", text_dim)
-        mlflow.log_param("image_dim", image_dim)
         mlflow.log_param("item_id_vocab_size", vocab_sizes["item_id"])
         mlflow.log_param("device", str(device))
         log_reproducibility_metadata(
@@ -156,9 +154,9 @@ def main(args: argparse.Namespace) -> None:
             epoch_losses = []
             for _ in range(steps_per_epoch):
                 batch = sample_training_batch(train_df, args.batch_size, args.hard_negatives_per_anchor, rng)
-                anchor_features = encode_item_side(batch.anchor_rows, "anchor", vocabs, image_dim).to(device)
-                pos_features = encode_item_side(batch.anchor_rows, "candidate", vocabs, image_dim).to(device)
-                hard_neg_features, hard_neg_valid = encode_hard_negatives(batch, vocabs, image_dim)
+                anchor_features = encode_item_side(batch.anchor_rows, "anchor", vocabs).to(device)
+                pos_features = encode_item_side(batch.anchor_rows, "candidate", vocabs).to(device)
+                hard_neg_features, hard_neg_valid = encode_hard_negatives(batch, vocabs)
                 hard_neg_features = hard_neg_features.to(device)
                 hard_neg_valid = hard_neg_valid.to(device)
 
@@ -173,7 +171,7 @@ def main(args: argparse.Namespace) -> None:
                 epoch_losses.append(loss.item())
 
             mean_loss = float(np.mean(epoch_losses))
-            val_recall = recall_at_k(model, ranking_val, item_catalog_df, vocabs, image_dim, k=args.recall_k)
+            val_recall = recall_at_k(model, ranking_val, item_catalog_df, vocabs, k=args.recall_k)
             mlflow.log_metric("train_loss", mean_loss, step=epoch)
             mlflow.log_metric("val_recall_at_200", val_recall, step=epoch)
             logger.info("epoch=%d train_loss=%.4f val_recall_at_%d=%.4f", epoch, mean_loss, args.recall_k, val_recall)

@@ -108,11 +108,10 @@ def build_candidate_features(candidate_df) -> dict:
 def build_item_catalog(catalog_df) -> dict:
     """Builds the item_id -> metadata dict written to item_catalog.json.
 
-    Only category/subcategory/brand/price are kept -- tags/image_embedding/
-    text_embedding are retrieval-encoder inputs, not needed by the Ranking
-    Service (categorical + price features only) or the API Gateway
-    (response enrichment: category/brand/price, no images -- see
-    docs/build-phases.md's catalog generation step, image left null).
+    Only category/subcategory/brand/price are kept -- tags/text_embedding
+    are retrieval-encoder inputs, not needed by the Ranking Service
+    (categorical + price features only) or the API Gateway (response
+    enrichment: category/brand/price).
 
     Args:
         catalog_df: training.db_io.read_full_item_catalog(engine)'s output.

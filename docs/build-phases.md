@@ -8,7 +8,7 @@ Phase 0 — Infra scaffolding
 
 Phase 1 — Static reference data
 
-4. Generate Item Catalog directly (it's current-state, not derived — fine to hand-generate): item_id, category, subcategory, brand, price, tags, description, image (left null). Reserve a subset of items as empty cells to indicate "not yet introduced" (future catalog date, zero history) — this is what makes the cold-start demo real later.
+4. Generate Item Catalog directly (it's current-state, not derived — fine to hand-generate): item_id, category, subcategory, brand, price, tags, description. Reserve a subset of items as empty cells to indicate "not yet introduced" (future catalog date, zero history) — this is what makes the cold-start demo real later.
 5. Pick a scale: something like a few thousand items and a low-thousands user population — enough to produce non-trivial category/brand distributions and a real train/holdout split, small enough to generate and train on fast.
 6. Generate a synthetic user population with a hidden latent preference structure (e.g. per-user category/brand affinity weights) — used only inside the event simulator to drive realistic behavior, never persisted or read directly by any model (that would be leaking ground truth into training).
 

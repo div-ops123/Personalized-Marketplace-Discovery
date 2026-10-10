@@ -81,7 +81,6 @@ def test_build_item_catalog_shape_drops_embeddings():
             "brand": ["Nike"],
             "price": [99.99],
             "tags": [["casual"]],
-            "image_embedding": [None],
             "text_embedding": [[0.1, 0.2]],
         }
     )

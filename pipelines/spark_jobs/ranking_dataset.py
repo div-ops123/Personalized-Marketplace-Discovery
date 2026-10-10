@@ -152,7 +152,7 @@ def _asof_join(
 
 def _item_features(spark: SparkSession, items_df: pd.DataFrame, prefix: str) -> SparkDataFrame:
     """Item catalog category/subcategory/brand/price, columns prefixed for a join role."""
-    df = spark.createDataFrame(items_df.drop(columns=["tags", "image_embedding", "text_embedding"]))
+    df = spark.createDataFrame(items_df.drop(columns=["tags", "text_embedding"]))
     for column in ["category", "subcategory", "brand", "price"]:
         df = df.withColumnRenamed(column, f"{prefix}_{column}")
     return df

@@ -17,10 +17,9 @@
 | Brand | Categorical | Learned embedding |
 | Price tier | Categorical | Bucketed (budget / mid / premium) |
 | Tags | Multi-hot | Style, occasion, material etc. |
-| Image embedding | Dense vector | Raw pre-encoded image-model output, fed as encoder input — not a precomputed pairwise similarity score |
 | Text / description embedding | Dense vector | Raw pre-encoded text-model output (e.g. sentence-transformer), fed as encoder input — not a precomputed pairwise similarity score |
 
-Both embeddings must be per-item vectors computed independently of any specific pairing, so each item can be encoded once, cached, and indexed for ANN search. A precomputed pairwise similarity score would require the pair to already be known and is incompatible with this architecture.
+The text embedding must be a per-item vector computed independently of any specific pairing, so each item can be encoded once, cached, and indexed for ANN search. A precomputed pairwise similarity score would require the pair to already be known and is incompatible with this architecture.
 
 **Serving-time consequence:** because there is no User Tower, the anchor item's embedding is already precomputed and cached at indexing time. Serving a request is an embedding lookup + ANN search over the item index — no live encoder inference is needed at request time, which is even more favorable to the sub-100ms budget than a personalized two-tower design would be.
 
@@ -34,9 +33,9 @@ Recommendation impressions provide only a limited number of exposed negatives pe
 
 ⚠️ Accepts the usual risk that some in-batch negatives may actually be semantically related (false negatives).
 
-The retrieval model's goal isn't to mimic a text/image embedding model — it's to learn *behavioral* similarity: which items users actually treat as interchangeable or worth exploring together. Text/image embeddings are inputs to the encoder; the click-pair signal is the training target.
+The retrieval model's goal isn't to mimic a text embedding model — it's to learn *behavioral* similarity: which items users actually treat as interchangeable or worth exploring together. Text embeddings are inputs to the encoder; the click-pair signal is the training target.
 
-**Cold start / bootstrap:** before the Similar Items widget has production traffic, no click-pairs exist yet. Bootstrap the v0 encoder using content-based semantic similarity (image/text embedding distance, category/brand agreement) as a weak positive-pair heuristic, then transition to training on behavioral click-pairs once the widget is live and logging impressions.
+**Cold start / bootstrap:** before the Similar Items widget has production traffic, no click-pairs exist yet. Bootstrap the v0 encoder using content-based semantic similarity (text embedding distance, category/brand agreement) as a weak positive-pair heuristic, then transition to training on behavioral click-pairs once the widget is live and logging impressions.
 
 ---
 
