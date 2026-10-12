@@ -53,22 +53,53 @@ def test_build_query_groups_sums_to_row_count_and_matches_manual_boundaries():
     ]
 
 
-def test_encode_ranking_examples_nan_passthrough_for_nullable_columns():
+def test_encode_ranking_examples_zero_fills_unknown_user_and_candidate_features():
     df = _synthetic_ranking_df()
     vocabs = build_taxonomy_vocabs()
     features, labels = encode_ranking_examples(df, vocabs)
 
-    assert features["user_avg_purchase_price"].isna().tolist() == [False, True, False, True, False]
-    assert features["candidate_recommendation_ctr"].isna().tolist() == [False, True, False, True, False]
-    assert features["candidate_recommendation_impressions"].isna().tolist() == [False, True, False, True, False]
+    # Rows 1 and 3 are unknown (no user snapshot, never-served candidate).
+    assert features["user_avg_purchase_price"].tolist() == [50.0, 0.0, 50.0, 0.0, 30.0]
+    assert features["candidate_recommendation_ctr"].tolist() == [0.1, 0.0, 0.2, 0.0, 0.3]
+    assert features["candidate_recommendation_cvr"].tolist() == [0.01, 0.0, 0.02, 0.0, 0.03]
+    assert features["candidate_recommendation_impressions"].tolist() == [100.0, 0.0, 200.0, 0.0, 300.0]
+    assert not features.isna().any().any()
     assert labels.tolist() == [1, 0, 0, 1, 0]
 
 
-def test_encode_ranking_examples_user_features_missing_flag():
+def test_encode_ranking_examples_all_none_columns_are_zero_not_object_dtype():
+    # One online request for an unknown user and a never-served candidate:
+    # every value in these columns is None.
+    df = _synthetic_ranking_df().iloc[[1]].copy()
+    df["user_avg_purchase_price"] = None
+    df["candidate_recommendation_ctr"] = None
+    vocabs = build_taxonomy_vocabs()
+    features, _ = encode_ranking_examples(df, vocabs)
+
+    assert features["user_avg_purchase_price"].dtype.kind == "f"
+    assert features["candidate_recommendation_ctr"].dtype.kind == "f"
+    assert features["user_avg_purchase_price"].tolist() == [0.0]
+    assert features["candidate_recommendation_ctr"].tolist() == [0.0]
+
+
+def test_encode_ranking_examples_unknown_user_multi_hot_is_all_zero_and_flag_is_gone():
     df = _synthetic_ranking_df()
     vocabs = build_taxonomy_vocabs()
     features, _ = encode_ranking_examples(df, vocabs)
-    assert features["user_features_missing"].tolist() == [0, 1, 0, 1, 0]
+
+    assert "user_features_missing" not in features.columns
+    multi_hot_columns = [c for c in features.columns if c.startswith(("user_prefers_brand__", "user_affinity_category__"))]
+    assert features.loc[1, multi_hot_columns].sum() == 0  # row 1: unknown user
+
+
+def test_encode_ranking_examples_does_not_fill_not_null_columns():
+    # position/prices/cross features are NOT NULL upstream: a NaN there is a
+    # bug and must stay visible, not be silently zero-filled.
+    df = _synthetic_ranking_df()
+    df.loc[0, "candidate_price"] = None
+    vocabs = build_taxonomy_vocabs()
+    features, _ = encode_ranking_examples(df, vocabs)
+    assert features["candidate_price"].isna().tolist() == [True, False, False, False, False]
 
 
 def test_encode_ranking_examples_multi_hot_brand_and_category():

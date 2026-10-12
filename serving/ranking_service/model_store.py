@@ -66,11 +66,11 @@ class ModelStore:
         (training/serving parity, LLD.md:5-6) -- is directly unit
         testable without needing a real trained booster.
 
-        NULL handling matches training/ranking_preprocessing.py's
-        encode_ranking_examples exactly: an unknown user_id or a candidate
-        with no feature snapshot yet passes through as None/NaN (never
-        synthesized as 0), so the model sees the same "unknown" signal it
-        was trained on -- not a fabricated default.
+        NULL handling: an unknown user_id or a candidate with no feature
+        snapshot yet is emitted here as None, unfilled. The fill (unknown
+        -> 0) happens in training/ranking_preprocessing.py's
+        encode_ranking_examples -- the same function training uses -- so
+        the model sees the same encoding it was trained on.
 
         Args:
             anchor_item_id: The PDP item being viewed.

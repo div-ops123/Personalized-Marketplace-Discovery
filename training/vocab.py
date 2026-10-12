@@ -113,8 +113,8 @@ def multi_hot_encode(values: list, vocab: Vocabulary) -> np.ndarray:
     Args:
         values: One entry per row, each either a list of tokens or None
             (None means "no data" -- e.g. a cold-start user with no
-            snapshot yet -- and encodes to an all-zero row, distinct from
-            an empty list which means "known to have zero of these").
+            snapshot yet). None and an empty list both encode to an
+            all-zero row; the output cannot tell them apart.
         vocab: The vocabulary to encode tokens against.
 
     Returns:

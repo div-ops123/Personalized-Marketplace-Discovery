@@ -40,6 +40,16 @@ _CONTINUOUS_COLUMNS = [
     "price_diff",
 ]
 
+# Unknown (cold-start user / never-served candidate) -> 0, see
+# encode_ranking_examples. Every other continuous column is NOT NULL in
+# ranking_training_examples, so a NaN there is a bug and stays visible.
+_ZERO_FILL_COLUMNS = {
+    "user_avg_purchase_price",
+    "candidate_recommendation_ctr",
+    "candidate_recommendation_cvr",
+    "candidate_recommendation_impressions",
+}
+
 
 def build_query_groups(
     df: pd.DataFrame, group_col: str = "recommendation_impression_id"
@@ -71,17 +81,24 @@ def encode_ranking_examples(
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Encodes a ranking_training_examples slice into LightGBM-ready features.
 
-    NULL handling (explicit, no imputation):
+    NULL handling (unknown -> 0, no separate missingness flag):
     - user_preferred_brands/user_historical_category_affinity NULL (no
-      snapshot yet) -> multi-hot all-zero, plus a user_features_missing
-      flag so the model distinguishes "no snapshot" from "known user,
-      genuinely zero affinity."
-    - user_avg_purchase_price NULL -> passthrough NaN (LightGBM handles
-      natively, no imputation).
-    - candidate_recommendation_ctr/cvr/impressions NULL (candidate's first
-      impression, no snapshot yet) -> passthrough NaN, never synthesized
-      as 0 (0 would falsely claim "known to convert at 0%" instead of
-      "unknown").
+      purchase before the snapshot) -> multi-hot all-zero. A user with a
+      snapshot has at least one purchase, so their top-3 always has a 1:
+      an all-zero row can only mean "no snapshot".
+    - user_avg_purchase_price NULL -> 0. No real user averages $0, so 0 is
+      an out-of-range sentinel.
+    - candidate_recommendation_ctr/cvr/impressions NULL (candidate never
+      served before the snapshot) -> 0. impressions = 0 is the true value
+      and is what tells the model "cold", so ctr = 0 here is never
+      confused with "served many times, zero clicks".
+    - Columns that are NOT NULL upstream (position, prices, cross
+      features) are not filled: a NaN there is a bug and should stay
+      visible.
+    The raw tables, snapshot JSONs and frozen test set keep real NULLs;
+    this is the single place the fill happens, shared by training, the
+    validation gate and the Ranking Service, so training/serving parity
+    holds by construction.
 
     Args:
         df: A (single-split, already query-grouped) ranking_training_examples
@@ -107,9 +124,8 @@ def encode_ranking_examples(
         # user_avg_purchase_price is None) -- with nothing to force the
         # upcast, pandas leaves that as dtype object, which LightGBM's
         # predict() rejects even though the values are legitimately NaN.
-        features[column] = pd.to_numeric(df[column], errors="coerce")
-
-    features["user_features_missing"] = df["user_preferred_brands"].isna().astype(int)
+        values = pd.to_numeric(df[column], errors="coerce")
+        features[column] = values.fillna(0.0) if column in _ZERO_FILL_COLUMNS else values
 
     brand_multi_hot = multi_hot_encode(df["user_preferred_brands"].tolist(), vocabs["brand"])
     for index, brand in enumerate(vocabs["brand"].token_to_index):

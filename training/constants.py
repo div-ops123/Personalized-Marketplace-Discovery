@@ -9,7 +9,7 @@ from pathlib import Path
 # preprocessing/vocab logic here would make an old model artifact's
 # preprocessing incompatible with newly-read training data. Logged as an
 # MLflow tag on every run for reproducibility.
-FEATURE_SCHEMA_VERSION = "v2"
+FEATURE_SCHEMA_VERSION = "v3"
 
 # Retrieval encoder defaults (docs/build-phases.md Phase 5). Not documented
 # anywhere in docs/ -- standard choices for a small MLP-plus-embeddings

@@ -20,7 +20,7 @@ Raw events land in Snowflake continuously via Kinesis.
 
 **New items:** surfaced by retrieval regardless of interaction history, because the item encoder is content-based (text embeddings, category, brand) — a new item gets an embedding and enters the ANN index as soon as it's indexed, with zero click history required. Ranking also has signal on new items through their catalog/content features even before behavioral aggregates (historical CTR/CVR) accumulate; those default to a global prior via the smoothing/backoff already defined in data-schema.md.
 
-**New / anonymous users:** retrieval is entirely item-item and unaffected by user identity. Ranking degrades gracefully — user-level features (preferred brands, avg purchase price, category affinity) are simply unavailable, so ranking falls back to anchor/candidate/cross features only. The widget still functions; it's just not personalized for that request.
+**New / anonymous users:** retrieval is entirely item-item and unaffected by user identity. Ranking degrades gracefully — user-level features (preferred brands, avg purchase price, category affinity) are zero-filled (no purchase history), so ranking effectively falls back to anchor/candidate/cross features only. The widget still functions; it's just not personalized for that request.
 
 ---
 

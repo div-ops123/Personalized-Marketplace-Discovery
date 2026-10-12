@@ -222,6 +222,24 @@ def test_rank_returns_all_candidates_sorted_descending(tmp_path):
     assert scores == sorted(scores, reverse=True)
 
 
+def test_rank_scores_unknown_user_and_never_served_candidate(tmp_path):
+    ranking_dir, features_dir = _write_snapshot(tmp_path)
+    store = ModelStore(ranking_dir, features_dir)
+
+    # user_never_seen has no snapshot and cand_diff_brand has no candidate
+    # stats: every user/candidate feature column is None before encoding,
+    # and must be zero-filled by the shared encoder, not rejected.
+    ranked = store.rank(
+        "anchor_1",
+        "user_never_seen",
+        "US",
+        "mobile",
+        [{"item_id": "cand_diff_brand", "retrieval_similarity_score": 0.5}],
+    )
+    assert [row["item_id"] for row in ranked] == ["cand_diff_brand"]
+    assert isinstance(ranked[0]["rank_score"], float)
+
+
 def test_rank_empty_candidates_returns_empty_list(tmp_path):
     ranking_dir, features_dir = _write_snapshot(tmp_path)
     store = ModelStore(ranking_dir, features_dir)
